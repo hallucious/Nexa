@@ -72,6 +72,11 @@ class _FakeSecretsClient:
             raise type("ResourceNotFoundException", (Exception,), {})()
         return {"ARN": "arn:aws:secretsmanager:region:acct:secret:nexa/ws-001/providers/openai", "LastChangedDate": "2026-04-11T12:06:00+00:00"}
 
+    def get_secret_value(self, SecretId: str):
+        if SecretId != "nexa/ws-001/providers/openai":
+            raise type("ResourceNotFoundException", (Exception,), {})()
+        return {"SecretString": "aws-probe-key"}
+
 
 def _probe_runner(probe_input: ProviderProbeExecutionInput):
     assert probe_input.provider_key == "openai"
@@ -219,3 +224,97 @@ def test_provider_probe_route_returns_conflict_when_probe_history_persistence_fa
     assert route_response.body["workspace_title"] == "Primary Workspace"
     assert route_response.body["provider_continuity"] is not None
     assert route_response.body["activity_continuity"] is not None
+
+
+def test_provider_probe_route_auto_resolves_aws_runner(monkeypatch) -> None:
+    import json
+    import urllib.request
+
+    class _FakeHttpResponse:
+        def __init__(self, payload: dict) -> None:
+            self._payload = json.dumps(payload).encode("utf-8")
+
+        def read(self) -> bytes:
+            return self._payload
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+    def _fake_urlopen(req, timeout=0):
+        assert req.full_url == "https://api.openai.com/v1/responses"
+        assert req.headers.get("Authorization") == "Bearer aws-probe-key"
+        body = json.loads(req.data.decode("utf-8"))
+        assert body["model"] == "gpt-4.1"
+        return _FakeHttpResponse({"output_text": "OK", "usage": {"output_tokens": 1}})
+
+    monkeypatch.setattr(urllib.request, "urlopen", _fake_urlopen)
+
+    route_response = RunHttpRouteSurface.handle_probe_workspace_provider(
+        http_request=HttpRouteRequest(
+            method="POST",
+            path="/api/workspaces/ws-001/provider-bindings/openai/probe",
+            headers={"Authorization": "Bearer token"},
+            session_claims={"sub": "user-owner", "sid": "sess-001", "exp": 4102444800, "roles": ["admin"]},
+            path_params={"workspace_id": "ws-001", "provider_key": "openai"},
+            json_body={"model_ref": "gpt-4.1"},
+        ),
+        workspace_context=_workspace(),
+        provider_key="openai",
+        binding_rows=_binding_rows(),
+        provider_catalog_rows=_catalog_rows(),
+        aws_secrets_manager_client=_FakeSecretsClient(),
+        aws_secrets_manager_config=AwsSecretsManagerBindingConfig(),
+        now_iso="2026-04-11T12:07:00+00:00",
+    )
+    assert route_response.status_code == 200
+    assert route_response.body["probe_status"] == "reachable"
+    assert route_response.body["effective_model_ref"] == "gpt-4.1"
+
+
+def test_provider_probe_framework_auto_resolves_aws_runner(monkeypatch) -> None:
+    import json
+    import urllib.request
+
+    class _FakeHttpResponse:
+        def __init__(self, payload: dict) -> None:
+            self._payload = json.dumps(payload).encode("utf-8")
+
+        def read(self) -> bytes:
+            return self._payload
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+    def _fake_urlopen(req, timeout=0):
+        assert req.full_url == "https://api.openai.com/v1/responses"
+        assert req.headers.get("Authorization") == "Bearer aws-probe-key"
+        body = json.loads(req.data.decode("utf-8"))
+        assert body["model"] == "gpt-4.1"
+        return _FakeHttpResponse({"output_text": "OK", "usage": {"output_tokens": 1}})
+
+    monkeypatch.setattr(urllib.request, "urlopen", _fake_urlopen)
+
+    response = FrameworkRouteBindings.handle_probe_workspace_provider(
+        request=FrameworkInboundRequest(
+            method="POST",
+            path="/api/workspaces/ws-001/provider-bindings/openai/probe",
+            headers={"Authorization": "Bearer token"},
+            session_claims={"sub": "user-owner", "sid": "sess-001", "exp": 4102444800, "roles": ["admin"]},
+            path_params={"workspace_id": "ws-001", "provider_key": "openai"},
+            json_body={"model_ref": "gpt-4.1"},
+        ),
+        workspace_context=_workspace(),
+        provider_key="openai",
+        binding_rows=_binding_rows(),
+        provider_catalog_rows=_catalog_rows(),
+        aws_secrets_manager_client=_FakeSecretsClient(),
+        aws_secrets_manager_config=AwsSecretsManagerBindingConfig(),
+        now_iso="2026-04-11T12:07:00+00:00",
+    )
+    assert response.status_code == 200

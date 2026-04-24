@@ -26,7 +26,9 @@ from src.server.recent_activity_api import RecentActivityService
 from src.server.provider_probe_history_api import ProviderProbeHistoryService
 from src.server.provider_secret_api import ProviderSecretIntegrationService
 from src.server.provider_health_api import ProviderHealthService, SecretMetadataReader
+from src.server.aws_secrets_manager_models import AwsSecretsManagerBindingConfig
 from src.server.provider_probe_api import ProviderProbeRunner, ProviderProbeService
+from src.server.provider_probe_resolution import resolve_managed_secret_metadata_reader, resolve_provider_probe_runner
 from src.server.provider_probe_models import ProductProviderProbeRequest
 from src.server.feedback_runtime import build_workspace_feedback_payload, build_feedback_submission_payload
 from src.server.provider_secret_models import ProductProviderBindingWriteRequest
@@ -6950,6 +6952,8 @@ class RunHttpRouteSurface:
         provider_catalog_rows: list[Mapping[str, Any]] | tuple[Mapping[str, Any], ...] = (),
         secret_metadata_reader: Optional[SecretMetadataReader] = None,
         probe_runner: Optional[ProviderProbeRunner] = None,
+        aws_secrets_manager_client: Any = None,
+        aws_secrets_manager_config: AwsSecretsManagerBindingConfig | None = None,
         probe_event_id_factory: Optional[Callable[[], str]] = None,
         probe_history_writer = None,
         now_iso: Optional[str] = None,
@@ -6986,8 +6990,16 @@ class RunHttpRouteSurface:
             request=probe_request,
             binding_rows=binding_rows,
             provider_catalog_rows=provider_catalog_rows,
-            secret_metadata_reader=secret_metadata_reader,
-            probe_runner=probe_runner,
+            secret_metadata_reader=resolve_managed_secret_metadata_reader(
+                secret_metadata_reader=secret_metadata_reader,
+                aws_secrets_manager_client=aws_secrets_manager_client,
+                aws_secrets_manager_config=aws_secrets_manager_config,
+            ),
+            probe_runner=resolve_provider_probe_runner(
+                probe_runner=probe_runner,
+                aws_secrets_manager_client=aws_secrets_manager_client,
+                aws_secrets_manager_config=aws_secrets_manager_config,
+            ),
             probe_event_id_factory=probe_event_id_factory,
             probe_history_writer=probe_history_writer,
             now_iso=now_iso,

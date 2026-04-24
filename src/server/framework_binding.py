@@ -3,8 +3,10 @@ from __future__ import annotations
 import json
 from typing import Any, Mapping, Optional, Sequence
 
+from src.server.aws_secrets_manager_models import AwsSecretsManagerBindingConfig
 from src.server.provider_health_api import SecretMetadataReader
 from src.server.provider_probe_api import ProviderProbeRunner
+from src.server.provider_probe_resolution import resolve_managed_secret_metadata_reader, resolve_provider_probe_runner
 
 from src.server.auth_models import RunAuthorizationContext, WorkspaceAuthorizationContext
 from src.server.boundary_models import EngineResultEnvelope, EngineRunLaunchRequest, EngineRunLaunchResponse, EngineRunStatusSnapshot
@@ -1050,6 +1052,8 @@ class FrameworkRouteBindings:
         provider_catalog_rows: Sequence[Mapping[str, Any]] = (),
         secret_metadata_reader: Optional[SecretMetadataReader] = None,
         probe_runner: Optional[ProviderProbeRunner] = None,
+        aws_secrets_manager_client: Any = None,
+        aws_secrets_manager_config: AwsSecretsManagerBindingConfig | None = None,
         probe_event_id_factory=None,
         probe_history_writer=None,
         now_iso: Optional[str] = None,
@@ -1065,8 +1069,16 @@ class FrameworkRouteBindings:
             provider_key=provider_key,
             binding_rows=binding_rows,
             provider_catalog_rows=provider_catalog_rows,
-            secret_metadata_reader=secret_metadata_reader,
-            probe_runner=probe_runner,
+            secret_metadata_reader=resolve_managed_secret_metadata_reader(
+                secret_metadata_reader=secret_metadata_reader,
+                aws_secrets_manager_client=aws_secrets_manager_client,
+                aws_secrets_manager_config=aws_secrets_manager_config,
+            ),
+            probe_runner=resolve_provider_probe_runner(
+                probe_runner=probe_runner,
+                aws_secrets_manager_client=aws_secrets_manager_client,
+                aws_secrets_manager_config=aws_secrets_manager_config,
+            ),
             probe_event_id_factory=probe_event_id_factory,
             probe_history_writer=probe_history_writer,
             now_iso=now_iso,
