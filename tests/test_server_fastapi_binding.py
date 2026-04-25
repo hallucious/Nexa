@@ -106,6 +106,32 @@ def _valid_working_save_artifact() -> dict:
         "ui": {"layout": {}, "metadata": {"app_language": "en-US"}},
     }
 
+def _provider_backed_working_save_artifact(ref: str = "ws-001-provider-draft") -> dict:
+    return {
+        "meta": {"format_version": "1.0.0", "storage_role": "working_save", "working_save_id": ref, "name": "Primary Workspace"},
+        "circuit": {
+            "nodes": [
+                {
+                    "node_id": "n-provider",
+                    "kind": "provider",
+                    "resource_ref": {"provider": "openai", "prompt": "prompt.main"},
+                    "execution": {"provider": {"provider_id": "openai:gpt", "prompt_ref": "prompt.main"}},
+                }
+            ],
+            "edges": [],
+            "entry": "n-provider",
+            "outputs": [{"name": "result", "source": "state.working.result"}],
+        },
+        "resources": {
+            "prompts": {"prompt.main": {"template": "Hello"}},
+            "providers": {"openai": {"provider_family": "openai", "display_name": "OpenAI GPT"}},
+            "plugins": {},
+        },
+        "state": {"input": {}, "working": {}, "memory": {}},
+        "runtime": {"status": "draft", "validation_summary": {}, "last_run": {}, "errors": []},
+        "ui": {"layout": {}, "metadata": {"app_language": "en-US"}},
+    }
+
 def _share_payload(share_id: str = "share-fastapi-001") -> dict:
     return export_public_nex_link_share(
         _commit_snapshot("snap-fastapi-share-001"),
@@ -3572,3 +3598,56 @@ def test_fastapi_binding_provider_probe_auto_resolves_aws_runner(monkeypatch) ->
     history_payload = history.json()
     assert history_payload["items"][0]["probe_event_id"] == "probe-auto-aws"
     assert history_payload["items"][0]["probe_status"] == "reachable"
+
+
+def test_fastapi_binding_workspace_shell_launch_rejects_when_required_provider_binding_is_missing() -> None:
+    client = _make_client(
+        artifact_source=_provider_backed_working_save_artifact('ws-fastapi-provider-001'),
+        workspace_provider_binding_rows=(),
+        recent_managed_secret_rows=(),
+        workspace_provider_probe_rows=(),
+    )
+
+    response = client.post('/api/workspaces/ws-001/shell/launch', headers=_session_headers(), json={'input_payload': {'question': 'hello from provider shell'}})
+
+    assert response.status_code == 409
+    payload = response.json()
+    assert payload['reason_code'] == 'launch.provider_binding_missing'
+    assert payload['blocking_findings'][0]['provider_key'] == 'openai'
+
+
+def test_fastapi_binding_workspace_shell_keeps_provider_setup_needed_when_required_provider_is_missing() -> None:
+    client = _make_client(
+        artifact_source=_provider_backed_working_save_artifact('ws-fastapi-provider-setup-001'),
+        workspace_provider_binding_rows=({
+            'binding_id': 'binding-001',
+            'workspace_id': 'ws-001',
+            'provider_key': 'anthropic',
+            'provider_family': 'anthropic',
+            'display_name': 'Anthropic Claude',
+            'credential_source': 'managed',
+            'secret_ref': 'secret://ws-001/anthropic',
+            'secret_version_ref': 'v1',
+            'enabled': True,
+            'created_at': '2026-04-11T12:00:00+00:00',
+            'updated_at': '2026-04-11T12:05:00+00:00',
+            'updated_by_user_id': 'user-owner',
+        },),
+        recent_managed_secret_rows=({
+            'workspace_id': 'ws-001',
+            'provider_key': 'anthropic',
+            'secret_ref': 'secret://ws-001/anthropic',
+            'last_rotated_at': '2026-04-11T12:06:00+00:00',
+        },),
+        workspace_provider_probe_rows=(),
+        workspace_run_rows=(),
+        workspace_result_rows={},
+    )
+
+    response = client.get('/api/workspaces/ws-001/shell', headers=_session_headers())
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload['first_success_setup_section']['setup_state'] == 'provider_setup_needed'
+    assert payload['server_product_readiness_review']['stages'][0]['provider_setup_reason_code'] == 'launch.provider_binding_missing'
+    assert payload['server_product_readiness_review']['stages'][0]['required_provider_keys'] == ['openai']

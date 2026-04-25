@@ -64,6 +64,38 @@ def _working_save(ref: str = "ws-save-001") -> dict:
     }
 
 
+def _provider_backed_commit_snapshot(ref: str = "snap-provider-001") -> dict:
+    return {
+        "meta": {
+            "format_version": "1.0.0",
+            "storage_role": "commit_snapshot",
+            "commit_id": ref,
+        },
+        "circuit": {
+            "nodes": [
+                {
+                    "node_id": "n-provider",
+                    "kind": "provider",
+                    "resource_ref": {"provider": "openai", "prompt": "prompt.main"},
+                    "execution": {"provider": {"provider_id": "openai:gpt", "prompt_ref": "prompt.main"}},
+                }
+            ],
+            "edges": [],
+            "entry": "n-provider",
+            "outputs": [{"name": "result", "source": "state.working.result"}],
+        },
+        "resources": {
+            "prompts": {"prompt.main": {"template": "Hello"}},
+            "providers": {"openai": {"provider_family": "openai", "display_name": "OpenAI GPT"}},
+            "plugins": {},
+        },
+        "state": {"input": {}, "working": {}, "memory": {}},
+        "validation": {"validation_result": "passed", "summary": {}},
+        "approval": {"approval_completed": True, "approval_status": "approved", "summary": {}},
+        "lineage": {"parent_commit_id": None, "metadata": {}},
+    }
+
+
 def test_run_admission_accepts_approved_snapshot_and_builds_engine_request_and_run_record() -> None:
     request = ProductRunLaunchRequest(
         workspace_id="ws-001",
@@ -228,3 +260,171 @@ def test_run_admission_accepts_typed_commit_snapshot_catalog_source() -> None:
     assert outcome.accepted_response is not None
     assert outcome.accepted_response.execution_target.target_type == "commit_snapshot"
     assert outcome.accepted_response.execution_target.target_ref == "snap-typed-001"
+
+
+def test_run_admission_rejects_launch_when_required_provider_binding_is_missing() -> None:
+    request = ProductRunLaunchRequest(
+        workspace_id="ws-001",
+        execution_target=ProductExecutionTarget(target_type="approved_snapshot", target_ref="snap-provider-001"),
+    )
+
+    outcome = RunAdmissionService.admit(
+        request=request,
+        request_auth=_auth_context(),
+        workspace_context=_workspace(),
+        target_catalog={
+            "snap-provider-001": ExecutionTargetCatalogEntry(
+                workspace_id="ws-001",
+                target_ref="snap-provider-001",
+                target_type="approved_snapshot",
+                source=_provider_backed_commit_snapshot("snap-provider-001"),
+            )
+        },
+    )
+
+    assert outcome.accepted is False
+    assert outcome.rejected_response is not None
+    assert outcome.rejected_response.reason_code == "launch.provider_binding_missing"
+    assert outcome.rejected_response.blocking_findings[0]["provider_key"] == "openai"
+
+
+def test_run_admission_rejects_launch_when_required_provider_secret_is_unresolved() -> None:
+    request = ProductRunLaunchRequest(
+        workspace_id="ws-001",
+        execution_target=ProductExecutionTarget(target_type="approved_snapshot", target_ref="snap-provider-secret-001"),
+    )
+
+    outcome = RunAdmissionService.admit(
+        request=request,
+        request_auth=_auth_context(),
+        workspace_context=_workspace(),
+        target_catalog={
+            "snap-provider-secret-001": ExecutionTargetCatalogEntry(
+                workspace_id="ws-001",
+                target_ref="snap-provider-secret-001",
+                target_type="approved_snapshot",
+                source=_provider_backed_commit_snapshot("snap-provider-secret-001"),
+            )
+        },
+        provider_binding_rows=(
+            {
+                "workspace_id": "ws-001",
+                "provider_key": "openai",
+                "display_name": "OpenAI GPT",
+                "credential_source": "managed",
+                "secret_ref": "secret://ws-001/openai",
+                "enabled": True,
+                "updated_at": "2026-04-11T12:05:00+00:00",
+            },
+        ),
+        managed_secret_rows=(),
+    )
+
+    assert outcome.accepted is False
+    assert outcome.rejected_response is not None
+    assert outcome.rejected_response.reason_code == "launch.provider_secret_unresolved"
+
+
+def test_run_admission_rejects_launch_when_latest_required_provider_probe_failed() -> None:
+    request = ProductRunLaunchRequest(
+        workspace_id="ws-001",
+        execution_target=ProductExecutionTarget(target_type="approved_snapshot", target_ref="snap-provider-probe-001"),
+    )
+
+    outcome = RunAdmissionService.admit(
+        request=request,
+        request_auth=_auth_context(),
+        workspace_context=_workspace(),
+        target_catalog={
+            "snap-provider-probe-001": ExecutionTargetCatalogEntry(
+                workspace_id="ws-001",
+                target_ref="snap-provider-probe-001",
+                target_type="approved_snapshot",
+                source=_provider_backed_commit_snapshot("snap-provider-probe-001"),
+            )
+        },
+        provider_binding_rows=(
+            {
+                "workspace_id": "ws-001",
+                "provider_key": "openai",
+                "display_name": "OpenAI GPT",
+                "credential_source": "managed",
+                "secret_ref": "secret://ws-001/openai",
+                "enabled": True,
+                "updated_at": "2026-04-11T12:05:00+00:00",
+            },
+        ),
+        managed_secret_rows=(
+            {
+                "workspace_id": "ws-001",
+                "provider_key": "openai",
+                "secret_ref": "secret://ws-001/openai",
+                "last_rotated_at": "2026-04-11T12:06:00+00:00",
+            },
+        ),
+        provider_probe_rows=(
+            {
+                "workspace_id": "ws-001",
+                "provider_key": "openai",
+                "probe_status": "failed",
+                "occurred_at": "2026-04-11T12:08:00+00:00",
+            },
+        ),
+    )
+
+    assert outcome.accepted is False
+    assert outcome.rejected_response is not None
+    assert outcome.rejected_response.reason_code == "launch.provider_probe_failed"
+
+
+def test_run_admission_ignores_stale_failed_provider_probe_after_binding_refresh() -> None:
+    request = ProductRunLaunchRequest(
+        workspace_id="ws-001",
+        execution_target=ProductExecutionTarget(target_type="approved_snapshot", target_ref="snap-provider-stale-probe-001"),
+    )
+
+    outcome = RunAdmissionService.admit(
+        request=request,
+        request_auth=_auth_context(),
+        workspace_context=_workspace(),
+        target_catalog={
+            "snap-provider-stale-probe-001": ExecutionTargetCatalogEntry(
+                workspace_id="ws-001",
+                target_ref="snap-provider-stale-probe-001",
+                target_type="approved_snapshot",
+                source=_provider_backed_commit_snapshot("snap-provider-stale-probe-001"),
+            )
+        },
+        provider_binding_rows=(
+            {
+                "workspace_id": "ws-001",
+                "provider_key": "openai",
+                "display_name": "OpenAI GPT",
+                "credential_source": "managed",
+                "secret_ref": "secret://ws-001/openai",
+                "enabled": True,
+                "updated_at": "2026-04-11T12:10:00+00:00",
+            },
+        ),
+        managed_secret_rows=(
+            {
+                "workspace_id": "ws-001",
+                "provider_key": "openai",
+                "secret_ref": "secret://ws-001/openai",
+                "last_rotated_at": "2026-04-11T12:10:00+00:00",
+            },
+        ),
+        provider_probe_rows=(
+            {
+                "workspace_id": "ws-001",
+                "provider_key": "openai",
+                "probe_status": "failed",
+                "occurred_at": "2026-04-11T12:08:00+00:00",
+            },
+        ),
+        run_id_factory=lambda: "run-provider-ready-001",
+    )
+
+    assert outcome.accepted is True
+    assert outcome.accepted_response is not None
+    assert outcome.accepted_response.run_id == "run-provider-ready-001"

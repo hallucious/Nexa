@@ -14,6 +14,7 @@ from src.ui.builder_shell import read_builder_shell_view_model
 from src.ui.i18n import normalize_ui_language, ui_language_from_sources, ui_text
 from src.ui.template_gallery import read_template_gallery_view_model
 from src.server.workspace_shell_sections import build_shell_section
+from src.server.provider_setup_readiness import evaluate_required_provider_setup
 from src.server.workspace_onboarding_api import _provider_continuity_summary_for_workspace
 from src.storage.nex_api import coerce_nex_loaded_artifact, resolve_nex_execution_target
 from src.storage.share_api import describe_public_nex_link_share
@@ -2782,12 +2783,14 @@ def _server_product_stage(*, stage_id: str, stage_label: str, stage_state: str, 
 def _server_product_readiness_review(
     shell_map: Mapping[str, Any],
     *,
+    artifact_model: WorkingSaveModel | CommitSnapshotModel | ExecutionRecordModel | None,
     onboarding_state: Mapping[str, Any] | None,
     latest_run_row: Mapping[str, Any] | None,
     latest_run_status_preview: Mapping[str, Any] | None,
     latest_run_result_preview: Mapping[str, Any] | None,
     provider_binding_rows: Sequence[Mapping[str, Any]],
     managed_secret_rows: Sequence[Mapping[str, Any]],
+    provider_probe_rows: Sequence[Mapping[str, Any]],
     feedback_rows: Sequence[Mapping[str, Any]],
     workspace_id: str,
     routes: Mapping[str, Any],
@@ -2815,15 +2818,28 @@ def _server_product_readiness_review(
     elif has_selected_template:
         entry_path_kind = "starter_template"
     first_success = bool((onboarding_state or {}).get("first_success_achieved")) or str((latest_run_result_preview or {}).get("result_state") or "").strip() in {"ready_success", "ready_partial"}
+    provider_setup_readiness = evaluate_required_provider_setup(
+        workspace_id=workspace_id,
+        source_payload=artifact_model,
+        provider_binding_rows=provider_binding_rows,
+        managed_secret_rows=managed_secret_rows,
+        provider_probe_rows=provider_probe_rows,
+    )
     has_server_provider = any(
         str(row.get("workspace_id") or "").strip() == workspace_id and bool(row.get("enabled", True))
         for row in provider_binding_rows
     ) or any(str(row.get("workspace_id") or "").strip() == workspace_id for row in managed_secret_rows)
-    provider_step_needed = (not has_server_provider) and bool(
+    provider_setup_missing = (
+        provider_setup_readiness.requires_provider_setup
+        if provider_setup_readiness.required_provider_keys
+        else (not has_server_provider)
+    )
+    provider_step_needed = provider_setup_missing and bool(
         has_selected_template
         or persisted_request_text
         or onboarding_step in {"review_preview", "approve", "run", "read_result"}
         or local_setup_state == "provider_setup_needed"
+        or bool(provider_setup_readiness.required_provider_keys)
     )
     has_history = latest_run_row is not None
     has_feedback_route = bool(routes.get("workspace_feedback") and routes.get("workspace_feedback_page"))
@@ -2899,10 +2915,15 @@ def _server_product_readiness_review(
         setup_state = "provider_setup_needed"
         setup_blockers = 1
         setup_pending = 0
-        setup_summary = ui_text(
-            "shell.product_readiness.summary.provider_setup_needed",
-            app_language=app_language,
-            fallback_text="Connect an AI model before the first workflow can run successfully.",
+        provider_finding = provider_setup_readiness.primary_finding
+        setup_summary = (
+            provider_finding.message
+            if provider_finding is not None
+            else ui_text(
+                "shell.product_readiness.summary.provider_setup_needed",
+                app_language=app_language,
+                fallback_text="Connect an AI model before the first workflow can run successfully.",
+            )
         )
         setup_action_id = "open_provider_bindings"
         setup_action_label = ui_text("server.shell.open_provider_bindings", app_language=app_language, fallback_text="Open provider bindings")
@@ -2944,6 +2965,10 @@ def _server_product_readiness_review(
     setup_stage["current_step_id"] = current_step_id
     setup_stage["next_step_id"] = next_step_id
     setup_stage["provider_step_needed"] = provider_step_needed
+    setup_stage["required_provider_keys"] = list(provider_setup_readiness.required_provider_keys)
+    setup_stage["provider_ready"] = not provider_setup_readiness.requires_provider_setup
+    if provider_setup_readiness.primary_finding is not None:
+        setup_stage["provider_setup_reason_code"] = provider_setup_readiness.primary_finding.reason_code
     setup_stage["selected_template_display_name"] = selected_template_display_name or None
     setup_stage["step_order"] = ["choose_entry_path", "connect_provider", "review_draft", "run"]
 
@@ -3295,12 +3320,14 @@ def build_workspace_shell_runtime_payload(
 
     server_product_readiness_review = _server_product_readiness_review(
         asdict(shell_vm),
+        artifact_model=model,
         onboarding_state=onboarding_state,
         latest_run_row=latest_run_row,
         latest_run_status_preview=latest_run_status_preview,
         latest_run_result_preview=latest_run_result_preview,
         provider_binding_rows=provider_binding_rows,
         managed_secret_rows=managed_secret_rows,
+        provider_probe_rows=provider_probe_rows,
         feedback_rows=feedback_rows,
         workspace_id=workspace_id,
         routes=routes,

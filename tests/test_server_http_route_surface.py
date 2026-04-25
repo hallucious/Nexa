@@ -76,6 +76,38 @@ def _working_save(ref: str = "ws-001") -> dict:
         "designer": {},
     }
 
+def _provider_backed_working_save(ref: str = "ws-provider-001") -> dict:
+    return {
+        "meta": {
+            "format_version": "1.0.0",
+            "storage_role": "working_save",
+            "working_save_id": ref,
+            "name": "Provider Workspace",
+        },
+        "circuit": {
+            "nodes": [
+                {
+                    "node_id": "n-provider",
+                    "kind": "provider",
+                    "resource_ref": {"provider": "openai", "prompt": "prompt.main"},
+                    "execution": {"provider": {"provider_id": "openai:gpt", "prompt_ref": "prompt.main"}},
+                }
+            ],
+            "edges": [],
+            "entry": "n-provider",
+            "outputs": [{"name": "result", "source": "state.working.result"}],
+        },
+        "resources": {
+            "prompts": {"prompt.main": {"template": "Hello"}},
+            "providers": {"openai": {"provider_family": "openai", "display_name": "OpenAI GPT"}},
+            "plugins": {},
+        },
+        "state": {"input": {}, "working": {}, "memory": {}},
+        "runtime": {"status": "draft", "validation_summary": {}, "last_run": {}, "errors": []},
+        "ui": {"layout": {}, "metadata": {"app_language": "en-US"}},
+        "designer": {},
+    }
+
 def _run_row(*, status: str = "running", status_family: str = "active") -> dict:
     return {
         "run_id": "run-001",
@@ -2011,3 +2043,19 @@ def test_launch_workspace_shell_route_accepts_loaded_artifact_source() -> None:
     assert response.body['execution_target']['target_type'] == 'commit_snapshot'
     assert response.body['execution_target']['target_ref'] == 'snap-shell-loaded-001'
     assert response.body['source_artifact']['canonical_ref'] == 'snap-shell-loaded-001'
+
+
+def test_launch_workspace_shell_route_rejects_when_required_provider_binding_is_missing() -> None:
+    response = RunHttpRouteSurface.handle_launch_workspace_shell(
+        http_request=_auth_request(method='POST', path='/api/workspaces/ws-001/shell/launch', path_params={'workspace_id': 'ws-001'}, json_body={'input_payload': {'question': 'hello from provider shell'}}),
+        workspace_context=_workspace(),
+        workspace_row={'workspace_id': 'ws-001', 'owner_user_id': 'user-owner', 'title': 'Primary Workspace', 'description': 'Main'},
+        artifact_source=_provider_backed_working_save('ws-shell-provider-001'),
+        provider_binding_rows=(),
+        managed_secret_rows=(),
+        provider_probe_rows=(),
+    )
+
+    assert response.status_code == 409
+    assert response.body['reason_code'] == 'launch.provider_binding_missing'
+    assert response.body['blocking_findings'][0]['provider_key'] == 'openai'

@@ -6,6 +6,7 @@ from typing import Any, Callable, Mapping, Optional, Sequence
 from uuid import uuid4
 
 from src.server.adapters import EngineLaunchAdapter
+from src.server.provider_setup_readiness import evaluate_required_provider_setup
 from src.server.auth_adapter import AuthorizationGate, build_engine_auth_context_refs
 from src.server.auth_models import AuthorizationInput, RequestAuthContext, WorkspaceAuthorizationContext
 from src.server.boundary_models import EngineRunLaunchRequest, EngineRunLaunchResponse
@@ -205,7 +206,7 @@ class ExecutionTargetResolver:
 
 class RunAdmissionService:
     @staticmethod
-    def _reject(*, workspace_id: Optional[str], reason_code: str, message: str, workspace_title: Optional[str] = None, provider_continuity=None, activity_continuity=None) -> RunAdmissionOutcome:
+    def _reject(*, workspace_id: Optional[str], reason_code: str, message: str, workspace_title: Optional[str] = None, provider_continuity=None, activity_continuity=None, blocking_findings: Sequence[Mapping[str, Any]] = ()) -> RunAdmissionOutcome:
         return RunAdmissionOutcome(
             rejected_response=ProductRunLaunchRejectedResponse(
                 status="rejected",
@@ -216,6 +217,7 @@ class RunAdmissionService:
                 workspace_title=workspace_title,
                 provider_continuity=provider_continuity,
                 activity_continuity=activity_continuity,
+                blocking_findings=[dict(item) for item in blocking_findings],
             )
         )
 
@@ -318,6 +320,26 @@ class RunAdmissionService:
                 )
             )
         assert resolved_target is not None
+
+        provider_setup = evaluate_required_provider_setup(
+            workspace_id=request.workspace_id,
+            source_payload=resolved_target.source_payload,
+            provider_binding_rows=provider_binding_rows,
+            managed_secret_rows=managed_secret_rows,
+            provider_probe_rows=provider_probe_rows,
+        )
+        if provider_setup.requires_provider_setup:
+            primary_finding = provider_setup.primary_finding
+            assert primary_finding is not None
+            return cls._reject(
+                workspace_id=request.workspace_id,
+                reason_code=primary_finding.reason_code,
+                message=primary_finding.message,
+                workspace_title=workspace_title,
+                provider_continuity=provider_continuity,
+                activity_continuity=activity_continuity,
+                blocking_findings=tuple(item.to_payload() for item in provider_setup.blocking_findings),
+            )
 
         run_request_id_factory = run_request_id_factory or (lambda: f"req_{uuid4().hex}")
         run_id_factory = run_id_factory or (lambda: f"run_{uuid4().hex}")
