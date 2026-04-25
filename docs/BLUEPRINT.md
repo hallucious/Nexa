@@ -580,3 +580,29 @@ Representation {
 - Redirected recent revision threads are archived out of active continuity using `approval_revision_redirect_archived_*` notes and are cleared when a new active revision thread forms.
 - Explicit reopen of the archived older scope restores that redirected thread into active continuity and should surface as reopened-thread continuity rather than ordinary recent-history reuse.
 - If that reopened older thread is later replaced by a newer active revision thread, rebuilt session cards and normalization should preserve the newer thread as active continuity and treat the older reopened origin only as short-lived replacement history.
+
+---
+
+## Engine Control-Flow / Deferred Contract Addendum
+
+The engine contract family now includes a dedicated control-flow reference set:
+
+* `docs/specs/execution/circuit_graph_control_flow_contract.md`
+* `docs/specs/engine/engine_contract_family_index.md`
+* `docs/specs/engine/engine_contract_reorganization_map.md`
+* `docs/specs/engine/conditional_branch_loop_node_family.md`
+* `docs/specs/engine/conditional_branch_node_deferred_contract.md`
+* `docs/specs/engine/loop_node_deferred_contract.md`
+* `docs/specs/engine/loop_streaming_output_deferred_contract.md`
+* `docs/specs/engine/dynamic_graph_mutation_deferred_contract.md`
+
+Canonical interpretation:
+
+1. Nexa circuits are graph-shaped and dependency-based, not merely linear.
+2. Structural fan-out is allowed.
+3. Dependency fan-in is allowed.
+4. Raw graph cycles are invalid.
+5. Explicit ConditionalBranchNode support is deferred.
+6. Explicit LoopNode support is deferred.
+7. Dynamic runtime graph mutation and autonomous graph rewrite are currently prohibited.
+8. Deferred documents preserve future design space but do not authorize active implementation.

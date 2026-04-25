@@ -143,3 +143,27 @@ These documents are currently the main supporting references for the role-aware 
 | `docs/specs/formats/nex_parser_validator_branch_rules.md` | role-aware load/validate branching |
 | `docs/specs/formats/nex_typed_model_spec.md` | typed model split for `.nex` roles |
 | `docs/specs/formats/nex_load_validate_api_spec.md` | public `.nex` load / validate API shape |
+
+---
+
+# Engine Contract Family / Control-Flow Reference Set
+
+These documents reorganize scattered engine-control and deferred expansion contracts. They clarify that Nexa is graph-shaped but DAG-bounded today: structural fan-out and dependency fan-in are allowed, while raw cycles, explicit LoopNode execution, explicit ConditionalBranchNode execution, and dynamic runtime graph mutation remain prohibited or deferred unless later promoted.
+
+| File | Purpose |
+|---|---|
+| `docs/specs/execution/circuit_graph_control_flow_contract.md` | canonical DAG / branch / merge / cycle / loop interpretation |
+| `docs/specs/engine/engine_contract_family_index.md` | status-aware index for engine contracts |
+| `docs/specs/engine/engine_contract_reorganization_map.md` | explains the contract reorganization and canonical answers |
+| `docs/specs/engine/engine_proposals_deferred_and_pending.md` | pending/deferred proposal holding register |
+| `docs/specs/engine/conditional_branch_loop_node_family.md` | deferred branch/loop family contract |
+| `docs/specs/engine/conditional_branch_node_deferred_contract.md` | deferred ConditionalBranchNode contract |
+| `docs/specs/engine/loop_node_deferred_contract.md` | deferred LoopNode contract |
+| `docs/specs/engine/loop_streaming_output_deferred_contract.md` | deferred loop streaming partial/final policy |
+| `docs/specs/engine/dynamic_graph_mutation_deferred_contract.md` | deferred/prohibited dynamic graph mutation boundary |
+
+Important:
+
+- Existence of a deferred document is not implementation permission.
+- Raw graph cycles remain invalid.
+- Branch and loop support must not be smuggled in through ordinary edges.

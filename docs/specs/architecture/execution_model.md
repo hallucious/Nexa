@@ -118,3 +118,24 @@ Rules:
 14. The event stream is an observability surface, not the canonical replacement of `ExecutionTrace`.
 15. Replay-triggered runs must remain semantically distinct from resumed runs; replay must not be inferred from pause metadata as a hidden resume path.
 16. `execution_resumed` must never be used to represent replay, audit, or history-verification execution paths.
+
+## 7. Graph Control-Flow Addendum
+
+Graph-level control-flow interpretation is governed by:
+
+`docs/specs/execution/circuit_graph_control_flow_contract.md`
+
+This execution model owns current reachability and event semantics.
+The control-flow contract owns the reader-facing interpretation of:
+
+- structural fan-out
+- dependency fan-in
+- raw cycle prohibition
+- current DAG baseline
+- distinction between current FlowPolicy and future explicit branch/loop nodes
+
+Important:
+
+- `FIRST_SUCCESS` in current v1 deterministic semantics must not be treated as a full ConditionalBranchNode family.
+- ordinary graph cycles remain invalid.
+- future LoopNode support must not be implemented as a raw cyclic edge.

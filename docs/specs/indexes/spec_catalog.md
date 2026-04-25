@@ -96,3 +96,42 @@ The storage / format documents are the current supporting reference set for thre
 
 The UI / editor / localization documents are currently a supporting reference branch.
 They guide architecture and future implementation, but they must not be added to the YAML-backed active spec core until code, public contracts, and automated tests are synchronized with them.
+
+---
+
+## 6. Engine Contract Family / Control-Flow Reference Set
+
+The following documents organize active, pending, and deferred engine-facing contracts that are not fully captured by the original active YAML-backed spec core.
+
+| Spec | Category | Status | Purpose |
+|---|---|---|---|
+| circuit_graph_control_flow_contract | execution | active reference | DAG baseline, structural fan-out, dependency fan-in, raw-cycle prohibition, branch/loop boundary |
+| engine_contract_family_index | engine | index | status-aware routing for engine contracts |
+| engine_contract_reorganization_map | engine | index / migration | explains the reorganization and canonical answers |
+| stage1_engine_contract_index | engine | active reference | Stage 1 governed execution bundle |
+| execution_governance_integration_contract | engine | active reference | integrated automation / streaming / safety / quota / delivery lifecycle |
+| reason_code_status_taxonomy_contract | engine | active reference | shared status and reason-code vocabulary |
+| batch_execution_contract | engine | pending | future batch execution family |
+| evaluation_node_contract | engine | pending | future evaluation/evidence family |
+| regression_alert_automation_contract | engine | pending | future regression alerting family |
+| engine_proposals_deferred_and_pending | engine | holding register | pending/deferred proposal inventory |
+| conditional_branch_loop_node_family | engine | deferred | future branch/loop contract family |
+| conditional_branch_node_deferred_contract | engine | deferred | future explicit conditional branch node |
+| loop_node_deferred_contract | engine | deferred | future explicit bounded loop node |
+| loop_streaming_output_deferred_contract | engine | deferred | future loop partial/final streaming policy |
+| dynamic_graph_mutation_deferred_contract | engine | deferred / prohibited currently | future dynamic graph mutation and autonomous rewrite boundary |
+| cross_run_memory_contract | engine | deferred | future cross-run memory family |
+| interactive_conversational_execution_contract | engine | deferred | future interactive/conversational execution family |
+
+### Decision
+
+The control-flow reference set clarifies current execution semantics without promoting deferred branch/loop/mutation features into active implementation scope.
+
+Current baseline:
+
+- structural fan-out is allowed
+- dependency fan-in is allowed
+- raw graph cycles are forbidden
+- ConditionalBranchNode is deferred
+- LoopNode is deferred
+- dynamic runtime graph mutation is prohibited unless explicitly promoted later

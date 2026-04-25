@@ -1,11 +1,11 @@
 Spec ID: validation_rule_catalog
-Version: 1.1.0
+Version: 1.2.0
 Status: Partial
 Category: policies
 Depends On:
 
 # Validation Rule Catalog
-Version: 1.1.0
+Version: 1.2.0
 Status: Official Contract
 
 Purpose:
@@ -29,7 +29,7 @@ ENG, ENT, CH, FLOW, NODE, PIPE, SIDE, DET, TRACE
 - ENG-001..008
 - ENT-001..005
 - CH-001..005
-- FLOW-001..005
+- FLOW-001..017 (006..017 reserved, see Control-Flow Rule Addendum v1.2.0)
 - NODE-001..006
 - PIPE-001..005
 - SIDE-001..003
@@ -147,3 +147,42 @@ Stability Rule
   and introduce a new rule_id if necessary.
 
 End of Validation Rule Catalog v1.0.0
+
+---
+
+## Control-Flow Rule Addendum v1.2.0
+
+The following control-flow-oriented rules are reserved or clarified by:
+
+`docs/specs/execution/circuit_graph_control_flow_contract.md`
+
+### Active clarification
+
+| rule_id | status | severity | meaning |
+|---|---|---:|---|
+| ENG-003 | implemented | error | raw graph cycle / DAG violation |
+| ENG-004 | cataloged | error | dynamic structure mutation declared/detected |
+| NODE-005 | cataloged | error | node attempts structural control |
+| FLOW-003 | cataloged | error | channel encodes hidden control logic |
+| FLOW-004 | cataloged | warning | unreachable node detected |
+| FLOW-005 | cataloged | warning | dead branch detected |
+
+### Planned / reserved future anchors
+
+| rule_id | status | severity | meaning |
+|---|---|---:|---|
+| FLOW-006 | reserved | error | unsupported conditional branch node used as executable feature |
+| FLOW-007 | reserved | error | unsupported loop node used as executable feature |
+| FLOW-008 | reserved | error | ambiguous output binding across fan-in |
+| FLOW-009 | reserved | error | invalid branch decision input |
+| FLOW-010 | reserved | error | ambiguous branch selection policy |
+| FLOW-011 | reserved | error | missing branch target |
+| FLOW-012 | reserved | error | missing loop termination policy |
+| FLOW-013 | reserved | error | unbounded loop |
+| FLOW-014 | reserved | error | invalid loop body reference |
+| FLOW-015 | reserved | error | loop artifact policy missing |
+| FLOW-016 | reserved | error | dependency merge missing required upstream inputs |
+| FLOW-017 | reserved | warning | optional upstream dependency consumed without declaration |
+
+Reserved rule ids must not be treated as implemented until corresponding validator tests exist.
+They are included here to prevent future branch/loop implementations from inventing conflicting status vocabulary.

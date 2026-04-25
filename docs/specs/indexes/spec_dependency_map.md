@@ -148,3 +148,41 @@ localization_test_strategy_spec
 ## 5. Bridge Rule
 
 The UI / i18n branch depends on the execution-model, storage-lifecycle, and UI-owned-state boundaries, but remains a supporting reference branch until implementation and contract tests converge.
+
+---
+
+## 6. Engine Control-Flow / Deferred Expansion Dependency Branch
+
+Active control-flow interpretation:
+
+    execution_model
+      ↓
+    circuit_graph_control_flow_contract
+      ↓
+    validation_engine_contract
+      ↓
+    validation_rule_catalog
+
+Deferred branch / loop expansion:
+
+    circuit_graph_control_flow_contract
+      ↓
+    conditional_branch_loop_node_family
+      ├─ conditional_branch_node_deferred_contract
+      ├─ loop_node_deferred_contract
+      │    ↓
+      │  loop_streaming_output_deferred_contract
+      └─ dynamic_graph_mutation_deferred_contract
+
+Engine family routing:
+
+    engine_contract_family_index
+      ├─ engine_contract_reorganization_map
+      ├─ engine_proposals_deferred_and_pending
+      ├─ stage1_engine_contract_index
+      └─ circuit_graph_control_flow_contract
+
+Bridge rule:
+
+The active control-flow branch depends on current execution and validation semantics.
+The deferred branch/loop/mutation documents preserve future design space only and must not be treated as active runtime permission.

@@ -114,23 +114,56 @@ Detection does not imply mandatory notification.
 **Status**
 Deferred
 
+**Canonical documents**
+- `docs/specs/engine/conditional_branch_loop_node_family.md`
+- `docs/specs/engine/conditional_branch_node_deferred_contract.md`
+- `docs/specs/engine/loop_node_deferred_contract.md`
+- `docs/specs/engine/loop_streaming_output_deferred_contract.md`
+
 **Why deferred**
 This is powerful but materially increases control-flow complexity.
 It belongs to later platform expansion, not current beginner/productization-first convergence.
 
-### 4.2 Cross-Run Memory Contract
+**Current boundary**
+Structural fan-out and dependency fan-in are allowed under `docs/specs/execution/circuit_graph_control_flow_contract.md`.
+Explicit conditional branch and loop node support remains deferred.
+Raw graph cycles remain invalid.
+
+### 4.2 Dynamic Graph Mutation / Autonomous Graph Rewrite
+
+**Status**
+Deferred / currently prohibited
+
+**Canonical document**
+- `docs/specs/engine/dynamic_graph_mutation_deferred_contract.md`
+
+**Why deferred**
+Dynamic runtime graph mutation changes validation, scheduler, trace, replay, artifact lineage, and approval truth.
+It must remain prohibited unless a future major architecture decision explicitly promotes it.
+
+**Current boundary**
+Structural changes must go through proposal, precheck, preview, approval, and commit.
+They must not occur as hidden runtime mutation.
+
+### 4.3 Cross-Run Memory Contract
 
 **Status**
 Deferred
+
+**Canonical document**
+- `docs/specs/engine/cross_run_memory_contract.md`
 
 **Why deferred**
 Cross-run memory is not just a feature.
 It changes what a run means across time.
 
-### 4.3 Interactive / Conversational Execution Contract
+### 4.4 Interactive / Conversational Execution Contract
 
 **Status**
 Deferred
+
+**Canonical document**
+- `docs/specs/engine/interactive_conversational_execution_contract.md`
 
 **Why deferred**
 This is the clearest product-character shift proposal in this proposal set.
