@@ -904,13 +904,17 @@ def test_fastapi_binding_workspace_shell_route_round_trip() -> None:
     assert 'share-shell-fastapi-001' in '\n'.join(payload['share_history_section']['detail']['items'])
     assert payload['share_history_section']['controls'][0]['action_kind'] == 'open_workspace_share_create'
     assert payload['recent_activity_section']['summary']['headline'] == 'Recent activity'
-    assert 'Activity items: 2' in payload['recent_activity_section']['summary']['lines']
-    assert 'run — run-002' in '\n'.join(payload['recent_activity_section']['detail']['items'])
+    assert 'Activity items: 5' in payload['recent_activity_section']['summary']['lines']
+    assert payload['recent_activity_section']['history'][0]['activity_type'] == 'provider_probe'
+    assert 'provider_probe — openai — reachable' in '\n'.join(payload['recent_activity_section']['detail']['items'])
     assert payload['recent_activity_section']['controls'][0]['action_target'] == '/api/users/me/activity?workspace_id=ws-001'
     assert payload['history_summary_section']['summary']['headline'] == 'History summary'
     assert 'Total runs: 2' in payload['history_summary_section']['summary']['lines']
     assert 'Successful runs: 1' in payload['history_summary_section']['summary']['lines']
     assert 'Share history entries: 1' in payload['history_summary_section']['detail']['items']
+    assert 'Provider binding updates: 1' in payload['history_summary_section']['detail']['items']
+    assert 'Managed secret updates: 1' in payload['history_summary_section']['detail']['items']
+    assert 'Provider probe checks: 1' in payload['history_summary_section']['detail']['items']
     assert payload['history_summary_section']['controls'][0]['action_kind'] == 'open_route'
     assert payload['routes']['workspace_provider_bindings'] == '/api/workspaces/ws-001/provider-bindings'
     assert payload['routes']['workspace_provider_health'] == '/api/workspaces/ws-001/provider-bindings/health'

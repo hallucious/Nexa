@@ -1625,13 +1625,17 @@ def test_framework_binding_workspace_shell_includes_latest_run_previews() -> Non
     assert 'share-shell-framework-001' in '\n'.join(parsed['share_history_section']['detail']['items'])
     assert parsed['share_history_section']['controls'][0]['action_kind'] == 'open_workspace_share_create'
     assert parsed['recent_activity_section']['summary']['headline'] == 'Recent activity'
-    assert 'Activity items: 1' in parsed['recent_activity_section']['summary']['lines']
-    assert 'run — run-001' in '\n'.join(parsed['recent_activity_section']['detail']['items'])
+    assert 'Activity items: 4' in parsed['recent_activity_section']['summary']['lines']
+    assert parsed['recent_activity_section']['history'][0]['activity_type'] == 'provider_probe'
+    assert 'provider_probe — openai — reachable' in '\n'.join(parsed['recent_activity_section']['detail']['items'])
     assert parsed['recent_activity_section']['controls'][0]['action_kind'] == 'open_route'
     assert parsed['history_summary_section']['summary']['headline'] == 'History summary'
     assert 'Total runs: 1' in parsed['history_summary_section']['summary']['lines']
     assert 'Successful runs: 1' in parsed['history_summary_section']['summary']['lines']
     assert 'Share history entries: 1' in parsed['history_summary_section']['detail']['items']
+    assert 'Provider binding updates: 1' in parsed['history_summary_section']['detail']['items']
+    assert 'Managed secret updates: 1' in parsed['history_summary_section']['detail']['items']
+    assert 'Provider probe checks: 1' in parsed['history_summary_section']['detail']['items']
     assert parsed['history_summary_section']['controls'][0]['action_target'] == '/api/users/me/history-summary?workspace_id=ws-001'
     assert parsed['routes']['workspace_provider_bindings'] == '/api/workspaces/ws-001/provider-bindings'
     assert parsed['routes']['workspace_provider_health'] == '/api/workspaces/ws-001/provider-bindings/health'

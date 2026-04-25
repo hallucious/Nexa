@@ -703,10 +703,14 @@ def _result_history_section(
 def _recent_activity_entries(
     recent_run_rows: Sequence[Mapping[str, Any]],
     onboarding_rows: Sequence[Mapping[str, Any]],
+    provider_binding_rows: Sequence[Mapping[str, Any]],
+    managed_secret_rows: Sequence[Mapping[str, Any]],
+    provider_probe_rows: Sequence[Mapping[str, Any]],
     workspace_id: str,
 ) -> list[dict[str, Any]]:
     entries: list[dict[str, Any]] = []
-    for row in _recent_run_rows_for_workspace(recent_run_rows, workspace_id):
+    normalized_workspace_id = str(workspace_id or "").strip()
+    for row in _recent_run_rows_for_workspace(recent_run_rows, normalized_workspace_id):
         run_id = str(row.get("run_id") or "").strip()
         if not run_id:
             continue
@@ -720,7 +724,7 @@ def _recent_activity_entries(
             "occurred_at": occurred_at,
             "summary": f"Run {run_id} reached {status_family}.",
         })
-    for row in _recent_onboarding_rows_for_workspace(onboarding_rows, workspace_id):
+    for row in _recent_onboarding_rows_for_workspace(onboarding_rows, normalized_workspace_id):
         onboarding_state_id = str(row.get("onboarding_state_id") or "").strip() or "onboarding"
         current_step = str(row.get("current_step") or "updated").strip() or "updated"
         occurred_at = str(row.get("updated_at") or row.get("created_at") or "").strip() or None
@@ -732,6 +736,63 @@ def _recent_activity_entries(
             "occurred_at": occurred_at,
             "summary": f"Onboarding moved to {current_step}.",
         })
+    binding_name_by_key = {
+        str(row.get("provider_key") or "").strip().lower(): str(row.get("display_name") or row.get("provider_key") or "provider").strip() or "provider"
+        for row in provider_binding_rows
+        if str(row.get("workspace_id") or "").strip() == normalized_workspace_id
+    }
+    for row in provider_binding_rows:
+        if str(row.get("workspace_id") or "").strip() != normalized_workspace_id:
+            continue
+        provider_key = str(row.get("provider_key") or "").strip().lower()
+        binding_id = str(row.get("binding_id") or "").strip()
+        occurred_at = str(row.get("updated_at") or row.get("created_at") or "").strip() or None
+        if not provider_key or not binding_id or not occurred_at:
+            continue
+        enabled = bool(row.get("enabled", True))
+        secret_ref = str(row.get("secret_ref") or "").strip()
+        status = "disabled" if not enabled else ("missing_secret" if not secret_ref else "configured")
+        entries.append({
+            "activity_id": f"binding:{binding_id}:{occurred_at or ''}",
+            "activity_type": "provider_binding",
+            "label": provider_key,
+            "status": status,
+            "occurred_at": occurred_at,
+            "summary": f"Provider binding for {binding_name_by_key.get(provider_key, provider_key)} is {status}.",
+        })
+    for row in managed_secret_rows:
+        if str(row.get("workspace_id") or "").strip() != normalized_workspace_id:
+            continue
+        provider_key = str(row.get("provider_key") or "").strip().lower()
+        secret_ref = str(row.get("secret_ref") or "").strip()
+        occurred_at = str(row.get("last_rotated_at") or "").strip() or None
+        if not provider_key or not secret_ref or not occurred_at:
+            continue
+        entries.append({
+            "activity_id": f"secret:{provider_key}:{secret_ref}:{occurred_at or ''}",
+            "activity_type": "managed_secret",
+            "label": provider_key,
+            "status": "resolved",
+            "occurred_at": occurred_at,
+            "summary": f"Managed secret for {binding_name_by_key.get(provider_key, provider_key)} was updated.",
+        })
+    for row in provider_probe_rows:
+        if str(row.get("workspace_id") or "").strip() != normalized_workspace_id:
+            continue
+        provider_key = str(row.get("provider_key") or "").strip().lower()
+        probe_event_id = str(row.get("probe_event_id") or "").strip()
+        occurred_at = str(row.get("occurred_at") or "").strip() or None
+        probe_status = str(row.get("probe_status") or "updated").strip() or "updated"
+        if not provider_key or not probe_event_id or not occurred_at:
+            continue
+        entries.append({
+            "activity_id": f"probe:{probe_event_id}:{occurred_at or ''}",
+            "activity_type": "provider_probe",
+            "label": provider_key,
+            "status": probe_status,
+            "occurred_at": occurred_at,
+            "summary": f"Provider probe for {binding_name_by_key.get(provider_key, provider_key)} is {probe_status}.",
+        })
     entries.sort(key=lambda item: (str(item.get("occurred_at") or ""), str(item.get("activity_id") or "")), reverse=True)
     return entries[:5]
 
@@ -739,11 +800,14 @@ def _recent_activity_entries(
 def _recent_activity_section(
     recent_run_rows: Sequence[Mapping[str, Any]],
     onboarding_rows: Sequence[Mapping[str, Any]],
+    provider_binding_rows: Sequence[Mapping[str, Any]],
+    managed_secret_rows: Sequence[Mapping[str, Any]],
+    provider_probe_rows: Sequence[Mapping[str, Any]],
     workspace_id: str,
     *,
     app_language: str = "en",
 ) -> dict[str, Any]:
-    entries = _recent_activity_entries(recent_run_rows, onboarding_rows, workspace_id)
+    entries = _recent_activity_entries(recent_run_rows, onboarding_rows, provider_binding_rows, managed_secret_rows, provider_probe_rows, workspace_id)
     latest = entries[0] if entries else None
     return build_shell_section(
         headline=ui_text("server.shell.recent_activity", app_language=app_language, fallback_text="Recent activity"),
@@ -1953,6 +2017,9 @@ def _history_summary_section(
     recent_run_rows: Sequence[Mapping[str, Any]],
     onboarding_rows: Sequence[Mapping[str, Any]],
     share_payload_rows: Sequence[Mapping[str, Any]],
+    provider_binding_rows: Sequence[Mapping[str, Any]],
+    managed_secret_rows: Sequence[Mapping[str, Any]],
+    provider_probe_rows: Sequence[Mapping[str, Any]],
     model: Any,
     workspace_id: str,
     *,
@@ -1965,6 +2032,22 @@ def _history_summary_section(
     active_runs = sum(1 for row in run_entries if str(row.get("status_family") or "").strip() == "active")
     success_runs = sum(1 for row in run_entries if str(row.get("status_family") or "").strip() == "terminal_success")
     failure_runs = sum(1 for row in run_entries if str(row.get("status_family") or "").strip() == "terminal_failure")
+    binding_entries = [
+        row for row in provider_binding_rows
+        if str(row.get("workspace_id") or "").strip() == str(workspace_id or "").strip()
+        and str(row.get("updated_at") or row.get("created_at") or "").strip()
+    ]
+    secret_entries = [
+        row for row in managed_secret_rows
+        if str(row.get("workspace_id") or "").strip() == str(workspace_id or "").strip()
+        and str(row.get("last_rotated_at") or "").strip()
+    ]
+    probe_entries = [
+        row for row in provider_probe_rows
+        if str(row.get("workspace_id") or "").strip() == str(workspace_id or "").strip()
+        and str(row.get("occurred_at") or "").strip()
+    ]
+    failed_probe_count = sum(1 for row in probe_entries if str(row.get("probe_status") or "").strip().lower() not in {"reachable", "warning"})
     latest_values = [
         str(row.get("updated_at") or row.get("created_at") or "").strip()
         for row in run_entries
@@ -1974,6 +2057,15 @@ def _history_summary_section(
     ] + [
         str(entry.get("updated_at") or "").strip()
         for entry in share_entries
+    ] + [
+        str(row.get("updated_at") or row.get("created_at") or "").strip()
+        for row in binding_entries
+    ] + [
+        str(row.get("last_rotated_at") or "").strip()
+        for row in secret_entries
+    ] + [
+        str(row.get("occurred_at") or "").strip()
+        for row in probe_entries
     ]
     latest_activity_at = max([value for value in latest_values if value], default=None)
     return build_shell_section(
@@ -1990,6 +2082,10 @@ def _history_summary_section(
             ui_text("server.shell.failed_runs_prefix", app_language=app_language, fallback_text="Failed runs: ") + str(failure_runs),
             ui_text("server.shell.onboarding_updates_prefix", app_language=app_language, fallback_text="Onboarding updates: ") + str(len(onboarding_entries)),
             ui_text("server.shell.share_history_entries_prefix", app_language=app_language, fallback_text="Share history entries: ") + str(len(share_entries)),
+            "Provider binding updates: " + str(len(binding_entries)),
+            "Managed secret updates: " + str(len(secret_entries)),
+            "Provider probe checks: " + str(len(probe_entries)),
+            "Failed provider probes: " + str(failed_probe_count),
         ],
         controls=[
             {
@@ -2023,6 +2119,10 @@ def _history_summary_section(
             "failed_runs": failure_runs,
             "onboarding_updates": len(onboarding_entries),
             "share_history_entries": len(share_entries),
+            "provider_binding_updates": len(binding_entries),
+            "managed_secret_updates": len(secret_entries),
+            "provider_probe_checks": len(probe_entries),
+            "failed_provider_probes": failed_probe_count,
             "latest_activity_at": latest_activity_at,
         }],
     )
@@ -3376,8 +3476,8 @@ def build_workspace_shell_runtime_payload(
         "result_history_section": _result_history_section(recent_run_rows, workspace_id, result_rows_by_run_id, app_language=app_language),
         "trace_history_section": _trace_history_section(recent_run_rows, workspace_id, trace_rows_lookup, app_language=app_language),
         "artifacts_history_section": _artifacts_history_section(recent_run_rows, workspace_id, artifact_rows_lookup),
-        "recent_activity_section": _recent_activity_section(recent_run_rows, onboarding_rows, workspace_id, app_language=app_language),
-        "history_summary_section": _history_summary_section(recent_run_rows, onboarding_rows, share_payload_rows, model, workspace_id, app_language=app_language),
+        "recent_activity_section": _recent_activity_section(recent_run_rows, onboarding_rows, provider_binding_rows, managed_secret_rows, provider_probe_rows, workspace_id, app_language=app_language),
+        "history_summary_section": _history_summary_section(recent_run_rows, onboarding_rows, share_payload_rows, provider_binding_rows, managed_secret_rows, provider_probe_rows, model, workspace_id, app_language=app_language),
         "provider_readiness_section": _provider_readiness_section(provider_binding_rows, managed_secret_rows, provider_probe_rows, workspace_id, app_language=app_language),
         "first_success_setup_section": _first_success_setup_section(asdict(shell_vm), asdict(template_gallery) if template_gallery is not None else None, server_product_readiness_review, onboarding_state=onboarding_state, provider_binding_rows=provider_binding_rows, managed_secret_rows=managed_secret_rows, provider_probe_rows=provider_probe_rows, workspace_id=workspace_id, routes=routes, app_language=app_language, persisted_state=server_backed_state.get("designer")),
         "first_success_run_section": _first_success_run_section(asdict(shell_vm), server_product_readiness_review, latest_run_status_preview=latest_run_status_preview, latest_run_result_preview=latest_run_result_preview, latest_run_trace_preview=latest_run_trace_preview, latest_run_artifacts_preview=latest_run_artifacts_preview, onboarding_state=onboarding_state, workspace_id=workspace_id, routes=routes, app_language=app_language),
