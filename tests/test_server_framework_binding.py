@@ -1594,6 +1594,7 @@ def test_framework_binding_workspace_shell_includes_latest_run_previews() -> Non
     assert response.status_code == 200
     assert parsed["latest_run_status_preview"]["run_id"] == "run-001"
     assert parsed["latest_run_result_preview"]["result_state"] == "ready_success"
+    assert parsed["latest_run_result_preview"]["result_summary"] == "Success."
     assert parsed["latest_run_trace_preview"]["event_count"] == 1
     assert parsed["latest_run_artifacts_preview"]["artifact_count"] == 1
     assert parsed["routes"]["latest_run_trace"] == "/api/runs/run-001/trace?limit=20"
@@ -1605,6 +1606,7 @@ def test_framework_binding_workspace_shell_includes_latest_run_previews() -> Non
     assert parsed['latest_run_result_summary']['headline'] == 'Success.'
     assert parsed['latest_run_result_detail']['title'] == 'Result detail'
     assert 'Result state: ready_success' in parsed['latest_run_result_detail']['items']
+    assert 'Summary: Success.' in parsed['latest_run_result_detail']['items']
     assert parsed['latest_run_trace_summary']['headline'] == 'Trace events: 1'
     assert 'Latest event: node.completed' in parsed['latest_run_trace_summary']['lines']
     assert parsed['latest_run_trace_detail']['title'] == 'Trace detail'

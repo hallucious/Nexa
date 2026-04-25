@@ -881,6 +881,8 @@ def test_fastapi_binding_workspace_shell_route_round_trip() -> None:
     assert payload['latest_run_status_preview']['run_id'] == 'run-002'
     assert payload['latest_run_result_preview']['run_id'] == 'run-002'
     assert payload['latest_run_result_preview']['result_state'] == 'ready_success'
+    assert payload['latest_run_result_preview']['result_summary'] == 'Success.'
+    assert payload['latest_run_result_preview']['output_preview'] == 'Latest Hello'
     assert payload['routes']['latest_run_trace'] == '/api/runs/run-002/trace?limit=20'
     assert payload['routes']['workspace_shell_share'] == '/api/workspaces/ws-001/shares'
     assert payload['routes']['workspace_public_share_create'] == '/api/workspaces/ws-001/shares'
@@ -937,6 +939,7 @@ def test_fastapi_binding_workspace_shell_route_round_trip() -> None:
     assert payload['first_success_setup_section']['current_step_id'] == 'run'
     assert payload['first_success_run_section']['summary']['headline'] == 'First-success run'
     assert payload['first_success_run_section']['run_state'] == 'complete'
+    assert 'Result summary: Success.' in payload['first_success_run_section']['detail']['items']
     assert payload['first_success_run_section']['run_path_kind'] == 'read_result'
     assert payload['first_success_run_section']['current_step_id'] == 'read_result'
     assert payload['first_success_run_section']['controls'][0]['action_target'] == 'runtime.result'
@@ -967,6 +970,8 @@ def test_fastapi_binding_workspace_shell_route_round_trip() -> None:
     assert payload['latest_run_result_summary']['headline'] == 'Success.'
     assert payload['latest_run_result_detail']['title'] == 'Result detail'
     assert 'Result state: ready_success' in payload['latest_run_result_detail']['items']
+    assert 'Summary: Success.' in payload['latest_run_result_detail']['items']
+    assert 'Output preview: Latest Hello' in payload['latest_run_result_detail']['items']
     assert payload['latest_run_trace_summary']['headline'] == 'Trace events: 2'
     assert 'Latest event: node.completed' in payload['latest_run_trace_summary']['lines']
     assert payload['latest_run_trace_detail']['title'] == 'Trace detail'

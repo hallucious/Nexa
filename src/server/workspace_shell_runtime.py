@@ -157,6 +157,8 @@ def _latest_run_status_preview(latest_run_row: Mapping[str, Any] | None) -> dict
     return {
         "run_id": run_id,
         "status": status,
+        "execution_state": status,
+        "status_family": summary,
         "summary": summary,
         "started_at": started_at,
         "updated_at": updated_at,
@@ -178,13 +180,19 @@ def _latest_run_result_preview(
     summary = str(result_row.get("result_summary") or "").strip() or None
     result_state = str(result_row.get("result_state") or "").strip() or None
     final_status = str(result_row.get("final_status") or "").strip() or None
-    if not any((summary, result_state, final_status)):
+    updated_at = str(result_row.get("updated_at") or "").strip() or None
+    final_output = result_row.get("final_output") if isinstance(result_row.get("final_output"), Mapping) else None
+    output_preview = str((final_output or {}).get("value_preview") or "").strip() or None
+    if not any((summary, result_state, final_status, output_preview)):
         return None
     return {
         "run_id": run_id,
         "result_state": result_state,
         "final_status": final_status,
+        "result_summary": summary,
         "summary": summary,
+        "output_preview": output_preview,
+        "updated_at": updated_at,
     }
 
 
@@ -398,12 +406,14 @@ def _latest_run_status_summary(preview: Mapping[str, Any] | None) -> dict[str, A
 def _latest_run_result_summary(preview: Mapping[str, Any] | None) -> dict[str, Any] | None:
     if not preview:
         return None
-    summary = str(preview.get("summary") or "Result available.").strip() or "Result available."
+    summary = str(preview.get("result_summary") or preview.get("summary") or "Result available.").strip() or "Result available."
     result_state = str(preview.get("result_state") or "").strip() or None
     final_status = str(preview.get("final_status") or "").strip() or None
+    output_preview = str(preview.get("output_preview") or "").strip() or None
     lines = _summary_lines(
         f"Result state: {result_state}" if result_state else None,
         f"Final status: {final_status}" if final_status else None,
+        f"Output preview: {output_preview}" if output_preview else None,
     )
     return {"headline": summary, "lines": lines}
 
@@ -432,7 +442,9 @@ def _latest_run_result_detail(preview: Mapping[str, Any] | None) -> dict[str, An
             f"Run id: {preview.get('run_id')}" if preview.get("run_id") else None,
             f"Result state: {preview.get('result_state')}" if preview.get("result_state") else None,
             f"Final status: {preview.get('final_status')}" if preview.get("final_status") else None,
-            f"Summary: {preview.get('summary')}" if preview.get("summary") else None,
+            f"Summary: {preview.get('result_summary') or preview.get('summary')}" if preview.get("result_summary") or preview.get("summary") else None,
+            f"Output preview: {preview.get('output_preview')}" if preview.get("output_preview") else None,
+            f"Updated: {preview.get('updated_at')}" if preview.get("updated_at") else None,
         ),
     }
 
@@ -1077,7 +1089,7 @@ def _first_success_run_section(
     latest_status = str(latest_run_status_preview.get("status") or latest_run_status_preview.get("execution_state") or "").strip() or None
     latest_run_id = str(latest_run_status_preview.get("run_id") or latest_run_result_preview.get("run_id") or "").strip() or None
     latest_result_state = str(latest_run_result_preview.get("result_state") or "").strip() or None
-    latest_result_summary = str(latest_run_result_preview.get("result_summary") or latest_run_result_preview.get("final_status") or "").strip() or None
+    latest_result_summary = str(latest_run_result_preview.get("result_summary") or latest_run_result_preview.get("summary") or latest_run_result_preview.get("final_status") or "").strip() or None
     latest_trace_events = int(latest_run_trace_preview.get("event_count") or 0)
     latest_artifact_count = int(latest_run_artifacts_preview.get("artifact_count") or 0)
 
