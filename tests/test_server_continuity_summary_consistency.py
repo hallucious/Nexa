@@ -7,6 +7,7 @@ from src.server import (
     WorkspaceAuthorizationContext,
     WorkspaceRegistryService,
 )
+from src.storage.share_api import export_public_nex_link_share
 
 
 def _auth(user_id: str = 'user-owner', roles: list[str] | None = None):
@@ -15,6 +16,38 @@ def _auth(user_id: str = 'user-owner', roles: list[str] | None = None):
         session_claims={'sub': user_id, 'sid': 'sess-001', 'exp': 4102444800, 'roles': roles or ['editor']},
     )
 
+def _working_save_artifact(workspace_id: str = 'ws-001') -> dict:
+    return {
+        'meta': {
+            'format_version': '1.0.0',
+            'storage_role': 'working_save',
+            'working_save_id': workspace_id,
+            'name': f'Workspace {workspace_id}',
+        },
+        'circuit': {'nodes': [], 'edges': [], 'entry': None, 'outputs': []},
+        'resources': {'prompts': {}, 'providers': {}, 'plugins': {}},
+        'state': {'input': {}, 'working': {}, 'memory': {}},
+        'runtime': {'status': 'draft', 'validation_summary': {}, 'last_run': {}, 'errors': []},
+        'ui': {'layout': {}, 'metadata': {'app_language': 'en-US'}},
+    }
+
+
+def _share_payload(
+    share_id: str,
+    *,
+    workspace_id: str = 'ws-001',
+    issued_by_user_ref: str = 'user-collab',
+    created_at: str = '2026-04-11T12:16:00+00:00',
+    updated_at: str | None = None,
+) -> dict:
+    return export_public_nex_link_share(
+        _working_save_artifact(workspace_id),
+        share_id=share_id,
+        title=f'Share {share_id}',
+        created_at=created_at,
+        updated_at=updated_at or created_at,
+        issued_by_user_ref=issued_by_user_ref,
+    )
 
 
 def _workspace_context(workspace_id: str = 'ws-001') -> WorkspaceAuthorizationContext:
@@ -161,12 +194,35 @@ def _dataset():
         _onboarding_row('onboard-001', '2026-04-11T12:12:30+00:00'),
         _onboarding_row('onboard-002', '2026-04-11T12:15:00+00:00', user_id='user-other', workspace_id='ws-002'),
     )
-    return workspace_rows, membership_rows, run_rows, probe_rows, binding_rows, secret_rows, onboarding_rows
+    share_rows = (
+        _share_payload(
+            'share-visible-001',
+            workspace_id='ws-001',
+            issued_by_user_ref='user-collab',
+            created_at='2026-04-11T12:16:00+00:00',
+            updated_at='2026-04-11T12:16:00+00:00',
+        ),
+        _share_payload(
+            'share-invisible-workspace-001',
+            workspace_id='ws-002',
+            issued_by_user_ref='user-collab',
+            created_at='2026-04-11T12:20:00+00:00',
+            updated_at='2026-04-11T12:20:00+00:00',
+        ),
+        _share_payload(
+            'share-other-user-001',
+            workspace_id='ws-001',
+            issued_by_user_ref='user-owner',
+            created_at='2026-04-11T12:21:00+00:00',
+            updated_at='2026-04-11T12:21:00+00:00',
+        ),
+    )
+    return workspace_rows, membership_rows, run_rows, probe_rows, binding_rows, secret_rows, onboarding_rows, share_rows
 
 
 
 def test_history_summary_derives_visible_counts_and_latest_ids_from_underlying_rows() -> None:
-    workspace_rows, membership_rows, run_rows, probe_rows, binding_rows, secret_rows, onboarding_rows = _dataset()
+    workspace_rows, membership_rows, run_rows, probe_rows, binding_rows, secret_rows, onboarding_rows, share_rows = _dataset()
 
     outcome = RecentActivityService.read_history_summary(
         request_auth=_auth('user-collab'),
@@ -177,6 +233,7 @@ def test_history_summary_derives_visible_counts_and_latest_ids_from_underlying_r
         provider_probe_rows=probe_rows,
         provider_binding_rows=binding_rows,
         managed_secret_rows=secret_rows,
+        share_payload_rows=share_rows,
     )
 
     assert outcome.ok is True
@@ -192,17 +249,23 @@ def test_history_summary_derives_visible_counts_and_latest_ids_from_underlying_r
     assert response.recent_provider_binding_count == 1
     assert response.recent_managed_secret_count == 1
     assert response.recent_onboarding_count == 1
+    assert response.recent_share_history_count == 1
     assert response.latest_workspace_id == 'ws-001'
     assert response.latest_probe_event_id == 'probe-002'
     assert response.latest_provider_binding_id == 'binding-001'
     assert response.latest_managed_secret_ref == 'secret://ws-001/openai'
     assert response.latest_onboarding_state_id == 'onboard-001'
-    assert response.latest_activity_at == '2026-04-11T12:12:30+00:00'
+    assert response.latest_share_id == 'share-visible-001'
+    assert response.latest_activity_at == '2026-04-11T12:16:00+00:00'
+    assert response.activity_continuity is not None
+    assert response.activity_continuity.recent_share_history_count == 1
+    assert response.activity_continuity.latest_share_id == 'share-visible-001'
+    assert response.activity_continuity.latest_activity_at == '2026-04-11T12:16:00+00:00'
 
 
 
 def test_workspace_detail_continuity_matches_same_workspace_store_projection() -> None:
-    workspace_rows, membership_rows, run_rows, probe_rows, binding_rows, secret_rows, onboarding_rows = _dataset()
+    workspace_rows, membership_rows, run_rows, probe_rows, binding_rows, secret_rows, onboarding_rows, share_rows = _dataset()
 
     outcome = WorkspaceRegistryService.read_workspace(
         request_auth=_auth('user-collab'),
@@ -214,6 +277,7 @@ def test_workspace_detail_continuity_matches_same_workspace_store_projection() -
         managed_secret_rows=secret_rows,
         provider_probe_rows=probe_rows,
         onboarding_rows=onboarding_rows,
+        share_payload_rows=share_rows,
     )
 
     assert outcome.ok is True
@@ -238,17 +302,19 @@ def test_workspace_detail_continuity_matches_same_workspace_store_projection() -
     assert response.activity_continuity.recent_provider_binding_count == 1
     assert response.activity_continuity.recent_managed_secret_count == 1
     assert response.activity_continuity.recent_onboarding_count == 1
+    assert response.activity_continuity.recent_share_history_count == 1
     assert response.activity_continuity.latest_run_id == 'run-003'
     assert response.activity_continuity.latest_probe_event_id == 'probe-002'
     assert response.activity_continuity.latest_provider_binding_id == 'binding-001'
     assert response.activity_continuity.latest_managed_secret_ref == 'secret://ws-001/openai'
     assert response.activity_continuity.latest_onboarding_state_id == 'onboard-001'
-    assert response.activity_continuity.latest_activity_at == '2026-04-11T12:12:30+00:00'
+    assert response.activity_continuity.latest_share_id == 'share-visible-001'
+    assert response.activity_continuity.latest_activity_at == '2026-04-11T12:16:00+00:00'
 
 
 
 def test_onboarding_workspace_scope_reuses_same_continuity_projection() -> None:
-    workspace_rows, membership_rows, run_rows, probe_rows, binding_rows, secret_rows, onboarding_rows = _dataset()
+    workspace_rows, membership_rows, run_rows, probe_rows, binding_rows, secret_rows, onboarding_rows, share_rows = _dataset()
 
     outcome = OnboardingContinuityService.read_onboarding_state(
         request_auth=_auth('user-collab'),
@@ -261,6 +327,7 @@ def test_onboarding_workspace_scope_reuses_same_continuity_projection() -> None:
         provider_binding_rows=binding_rows,
         managed_secret_rows=secret_rows,
         provider_probe_rows=probe_rows,
+        share_payload_rows=share_rows,
     )
 
     assert outcome.ok is True
@@ -277,6 +344,8 @@ def test_onboarding_workspace_scope_reuses_same_continuity_projection() -> None:
     assert response.activity_continuity.recent_run_count == 3
     assert response.activity_continuity.terminal_failure_run_count == 1
     assert response.activity_continuity.failed_probe_count == 1
+    assert response.activity_continuity.recent_share_history_count == 1
     assert response.activity_continuity.latest_run_id == 'run-003'
     assert response.activity_continuity.latest_onboarding_state_id == 'onboard-001'
-    assert response.activity_continuity.latest_activity_at == '2026-04-11T12:12:30+00:00'
+    assert response.activity_continuity.latest_share_id == 'share-visible-001'
+    assert response.activity_continuity.latest_activity_at == '2026-04-11T12:16:00+00:00'
