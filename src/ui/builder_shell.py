@@ -84,6 +84,18 @@ class BeginnerOnboardingHintView:
 
 
 @dataclass(frozen=True)
+class BeginnerSurfacePolicyView:
+    visible: bool = False
+    primary_surface_id: str | None = None
+    primary_workspace_id: str | None = None
+    suppressed_surface_ids: tuple[str, ...] = ()
+    unlock_condition: str | None = None
+    can_open_advanced_surfaces: bool = True
+    graph_first_allowed: bool = True
+    explanation: str | None = None
+
+
+@dataclass(frozen=True)
 class WorkspaceChainStageView:
     workspace_id: str = "visual_editor"
     workspace_label: str | None = None
@@ -172,6 +184,7 @@ class BuilderShellViewModel:
     layout: BuilderShellLayoutView = field(default_factory=BuilderShellLayoutView)
     diagnostics: BuilderShellDiagnosticsView = field(default_factory=BuilderShellDiagnosticsView)
     beginner_onboarding: BeginnerOnboardingHintView = field(default_factory=BeginnerOnboardingHintView)
+    beginner_surface_policy: BeginnerSurfacePolicyView = field(default_factory=BeginnerSurfacePolicyView)
     contextual_help: ContextualHelpView = field(default_factory=ContextualHelpView)
     privacy_transparency: PrivacyTransparencyView = field(default_factory=PrivacyTransparencyView)
     mobile_first_run: MobileFirstRunView = field(default_factory=MobileFirstRunView)
@@ -384,6 +397,70 @@ def _advanced_surfaces_unlocked(metadata: dict[str, Any], *, execution_vm: Execu
     if str(metadata.get("user_mode") or "").lower() == "advanced":
         return True
     return _beginner_first_success_achieved(metadata, execution_vm=execution_vm)
+
+
+
+def _beginner_surface_policy(
+    *,
+    beginner_mode: bool,
+    empty_workspace_mode: bool,
+    active_workspace_id: str,
+    validation_vm: ValidationPanelViewModel | None,
+    execution_vm: ExecutionPanelViewModel | None,
+    app_language: str,
+) -> BeginnerSurfacePolicyView:
+    if not beginner_mode:
+        return BeginnerSurfacePolicyView(
+            visible=False,
+            primary_surface_id=None,
+            primary_workspace_id=active_workspace_id,
+            suppressed_surface_ids=(),
+            unlock_condition="already_unlocked",
+            can_open_advanced_surfaces=True,
+            graph_first_allowed=True,
+            explanation=ui_text(
+                "beginner.surface_policy.unlocked.explanation",
+                app_language=app_language,
+                fallback_text="Advanced surfaces are available because the beginner gate is already crossed or explicitly requested.",
+            ),
+        )
+
+    suppressed = [
+        "trace_timeline",
+        "diff_viewer",
+        "artifact_viewer",
+        "storage_panel",
+        "result_history",
+    ]
+    graph_first_allowed = not empty_workspace_mode
+    primary_surface_id = "node_configuration"
+    explanation_key = "beginner.surface_policy.first_success.explanation"
+    fallback_explanation = "Keep the beginner path focused on the next concrete step until the first successful run is complete."
+
+    if empty_workspace_mode:
+        primary_surface_id = "designer"
+        suppressed.extend(["graph_workspace", "visual_editor"])
+        explanation_key = "beginner.surface_policy.empty.explanation"
+        fallback_explanation = "Start from the Designer input before exposing the graph or deeper inspection surfaces."
+    elif validation_vm is not None and validation_vm.overall_status == "blocked":
+        primary_surface_id = "validation"
+        explanation_key = "beginner.surface_policy.blocked.explanation"
+        fallback_explanation = "Show the blocking issue and one next action before exposing deeper debugging surfaces."
+    elif execution_vm is not None and execution_vm.execution_status in {"running", "queued"}:
+        primary_surface_id = "execution"
+        explanation_key = "beginner.surface_policy.running.explanation"
+        fallback_explanation = "Show execution progress while keeping trace, diff, and artifact inspection behind the beginner gate."
+
+    return BeginnerSurfacePolicyView(
+        visible=True,
+        primary_surface_id=primary_surface_id,
+        primary_workspace_id=active_workspace_id,
+        suppressed_surface_ids=tuple(dict.fromkeys(suppressed)),
+        unlock_condition="first_success_or_explicit_advanced_request",
+        can_open_advanced_surfaces=False,
+        graph_first_allowed=graph_first_allowed,
+        explanation=ui_text(explanation_key, app_language=app_language, fallback_text=fallback_explanation),
+    )
 
 
 def _beginner_onboarding_hint(
@@ -1138,6 +1215,14 @@ def read_builder_shell_view_model(
         execution_vm=execution_vm,
         app_language=app_language,
     )
+    beginner_surface_policy = _beginner_surface_policy(
+        beginner_mode=beginner_mode,
+        empty_workspace_mode=empty_workspace_mode,
+        active_workspace_id=active_workspace_id,
+        validation_vm=validation_vm,
+        execution_vm=execution_vm,
+        app_language=app_language,
+    )
     contextual_help = read_contextual_help_view(
         source_unwrapped,
         beginner_mode=beginner_mode,
@@ -1217,6 +1302,7 @@ def read_builder_shell_view_model(
         layout=layout_vm,
         diagnostics=diagnostics,
         beginner_onboarding=beginner_onboarding,
+        beginner_surface_policy=beginner_surface_policy,
         contextual_help=contextual_help,
         privacy_transparency=privacy_transparency,
         mobile_first_run=mobile_first_run,
@@ -1228,6 +1314,7 @@ __all__ = [
     "BuilderShellLayoutView",
     "BuilderShellDiagnosticsView",
     "BeginnerOnboardingHintView",
+    "BeginnerSurfacePolicyView",
     "WorkspaceChainStageView",
     "WorkspaceChainReviewView",
     "ProductSurfaceStageView",
