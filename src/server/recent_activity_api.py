@@ -1,10 +1,11 @@
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
+from dataclasses import replace
 from typing import Any, Optional
 
 from src.server.workspace_onboarding_api import WorkspaceRegistryService, _continuity_projection_for_workspace, _continuity_projection_for_workspace_ids
-from src.server.workspace_onboarding_models import ProductWorkspaceSummaryView
+from src.server.workspace_onboarding_models import ProductActivityContinuitySummary, ProductWorkspaceSummaryView
 from src.server.auth_models import RequestAuthContext
 from src.server.provider_probe_history_models import ProviderProbeHistoryRecord
 from src.server.run_recovery_projection import recovery_projection_from_run_row
@@ -71,9 +72,15 @@ def _visible_share_rows(
     request_auth: RequestAuthContext,
     share_payload_rows: Sequence[Mapping[str, Any]],
     workspace_id: str | None,
+    visible_workspace_ids: Sequence[str] | None = None,
 ) -> tuple[Mapping[str, Any], ...]:
     requested_user_ref = str(request_auth.requested_by_user_ref or '').strip()
     requested_workspace_id = str(workspace_id or '').strip() or None
+    allowed_workspace_ids = (
+        {str(item or '').strip() for item in visible_workspace_ids if str(item or '').strip()}
+        if visible_workspace_ids is not None
+        else None
+    )
     visible: list[Mapping[str, Any]] = []
     for row in share_payload_rows:
         try:
@@ -85,6 +92,8 @@ def _visible_share_rows(
         if requested_user_ref and issuer_user_ref != requested_user_ref:
             continue
         if requested_workspace_id is not None and source_workspace_id != requested_workspace_id:
+            continue
+        if allowed_workspace_ids is not None and source_workspace_id not in allowed_workspace_ids:
             continue
         visible.append(dict(row))
     return tuple(visible)
@@ -98,6 +107,70 @@ def _share_row_sort_key(row: Mapping[str, Any]) -> tuple[str, str]:
     return (str(descriptor.updated_at or descriptor.created_at or '').strip(), str(descriptor.share_id or '').strip())
 
 
+def _share_continuity_projection(
+    *,
+    request_auth: RequestAuthContext,
+    share_payload_rows: Sequence[Mapping[str, Any]],
+    workspace_id: str | None,
+    visible_workspace_ids: Sequence[str],
+) -> tuple[int, str | None, str | None]:
+    filtered_share_rows = list(
+        _visible_share_rows(
+            request_auth=request_auth,
+            share_payload_rows=share_payload_rows,
+            workspace_id=workspace_id,
+            visible_workspace_ids=visible_workspace_ids,
+        )
+    )
+    filtered_share_rows.sort(key=_share_row_sort_key, reverse=True)
+    if not filtered_share_rows:
+        return 0, None, None
+    latest_share_at = _share_row_sort_key(filtered_share_rows[0])[0] or None
+    latest_share_id = None
+    try:
+        latest_share_id = str(describe_public_nex_link_share(dict(filtered_share_rows[0])).share_id or '').strip() or None
+    except Exception:
+        latest_share_id = None
+    return len(filtered_share_rows), latest_share_id, latest_share_at
+
+
+def _activity_continuity_with_share_projection(
+    activity_continuity: ProductActivityContinuitySummary | None,
+    *,
+    request_auth: RequestAuthContext,
+    share_payload_rows: Sequence[Mapping[str, Any]],
+    workspace_id: str | None,
+    visible_workspace_ids: Sequence[str],
+) -> ProductActivityContinuitySummary | None:
+    recent_share_history_count, latest_share_id, latest_share_at = _share_continuity_projection(
+        request_auth=request_auth,
+        share_payload_rows=share_payload_rows,
+        workspace_id=workspace_id,
+        visible_workspace_ids=visible_workspace_ids,
+    )
+    if activity_continuity is None:
+        if recent_share_history_count <= 0:
+            return None
+        return ProductActivityContinuitySummary(
+            recent_share_history_count=recent_share_history_count,
+            latest_share_id=latest_share_id,
+            latest_activity_at=latest_share_at,
+        )
+    candidate_times = [
+        value for value in (
+            activity_continuity.latest_activity_at,
+            latest_share_at,
+        )
+        if value
+    ]
+    return replace(
+        activity_continuity,
+        recent_share_history_count=recent_share_history_count,
+        latest_share_id=latest_share_id,
+        latest_activity_at=max(candidate_times) if candidate_times else None,
+    )
+
+
 def _response_continuity_projection(
     *,
     request_auth: RequestAuthContext,
@@ -106,6 +179,7 @@ def _response_continuity_projection(
     workspace_id: Optional[str],
     onboarding_rows: Sequence[Mapping[str, Any]],
     run_rows: Sequence[Mapping[str, Any]],
+    share_payload_rows: Sequence[Mapping[str, Any]],
     provider_probe_rows: Sequence[Mapping[str, Any]],
     provider_binding_rows: Sequence[Mapping[str, Any]],
     managed_secret_rows: Sequence[Mapping[str, Any]],
@@ -123,8 +197,14 @@ def _response_continuity_projection(
             provider_probe_rows=provider_probe_rows,
             onboarding_rows=onboarding_rows,
         )
-        return provider_continuity, activity_continuity
-    return _continuity_projection_for_workspace_ids(
+        return provider_continuity, _activity_continuity_with_share_projection(
+            activity_continuity,
+            request_auth=request_auth,
+            share_payload_rows=share_payload_rows,
+            workspace_id=workspace_id,
+            visible_workspace_ids=visible_workspace_ids,
+        )
+    provider_continuity, activity_continuity = _continuity_projection_for_workspace_ids(
         tuple(visible_workspace_ids),
         user_id=request_auth.requested_by_user_ref or '',
         recent_run_rows=run_rows,
@@ -132,6 +212,13 @@ def _response_continuity_projection(
         managed_secret_rows=managed_secret_rows,
         provider_probe_rows=provider_probe_rows,
         onboarding_rows=onboarding_rows,
+    )
+    return provider_continuity, _activity_continuity_with_share_projection(
+        activity_continuity,
+        request_auth=request_auth,
+        share_payload_rows=share_payload_rows,
+        workspace_id=workspace_id,
+        visible_workspace_ids=visible_workspace_ids,
     )
 
 
@@ -445,6 +532,7 @@ class RecentActivityService:
                 request_auth=request_auth,
                 share_payload_rows=share_payload_rows,
                 workspace_id=workspace_id,
+                visible_workspace_ids=tuple(visible_ids),
             )
         )
         for row in filtered_share_rows:
@@ -543,6 +631,7 @@ class RecentActivityService:
             workspace_id=workspace_id,
             onboarding_rows=onboarding_rows,
             run_rows=run_rows,
+            share_payload_rows=share_payload_rows,
             provider_probe_rows=provider_probe_rows,
             provider_binding_rows=provider_binding_rows,
             managed_secret_rows=managed_secret_rows,
@@ -614,6 +703,7 @@ class RecentActivityService:
                 request_auth=request_auth,
                 share_payload_rows=share_payload_rows,
                 workspace_id=workspace_id,
+                visible_workspace_ids=tuple(visible_ids),
             )
         )
         filtered_share_rows.sort(key=_share_row_sort_key, reverse=True)
@@ -721,6 +811,7 @@ class RecentActivityService:
             workspace_id=workspace_id,
             onboarding_rows=onboarding_rows,
             run_rows=run_rows,
+            share_payload_rows=share_payload_rows,
             provider_probe_rows=provider_probe_rows,
             provider_binding_rows=provider_binding_rows,
             managed_secret_rows=managed_secret_rows,

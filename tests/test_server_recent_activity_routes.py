@@ -229,6 +229,9 @@ def test_recent_activity_summary_filters_to_visible_workspace() -> None:
     assert outcome.response.latest_workspace_id == 'ws-001'
     assert outcome.response.recent_share_history_count == 1
     assert outcome.response.latest_share_id == 'share-001'
+    assert outcome.response.activity_continuity is not None
+    assert outcome.response.activity_continuity.recent_share_history_count == 1
+    assert outcome.response.activity_continuity.latest_share_id == 'share-001'
     assert outcome.response.total_visible_runs == 1
     assert outcome.response.terminal_success_runs == 1
     assert outcome.response.terminal_failure_runs == 0
@@ -373,6 +376,10 @@ def test_recent_activity_service_includes_visible_share_lifecycle_events() -> No
     assert outcome.ok is True
     assert outcome.response is not None
     assert outcome.response.total_visible_count == 2
+    assert outcome.response.activity_continuity is not None
+    assert outcome.response.activity_continuity.recent_share_history_count == 1
+    assert outcome.response.activity_continuity.latest_share_id == 'share-001'
+    assert outcome.response.activity_continuity.latest_activity_at == '2026-04-11T12:13:00+00:00'
 
     share_item = next(item for item in outcome.response.activities if item.activity_type == 'share_created')
     assert share_item.share_id == 'share-001'
@@ -405,11 +412,37 @@ def test_recent_activity_route_includes_share_payload_rows() -> None:
     )
 
     assert activity_response.status_code == 200
+    assert activity_response.body['activity_continuity']['recent_share_history_count'] == 1
+    assert activity_response.body['activity_continuity']['latest_share_id'] == 'share-002'
     share_item = next(item for item in activity_response.body['activities'] if item['activity_type'] == 'share_created')
     assert share_item['share_id'] == 'share-002'
     assert share_item['share_path'] == '/share/share-002'
     assert share_item['links']['public_share'] == '/share/share-002'
     assert share_item['links']['public_share_management'] == '/api/users/me/public-shares/share-002'
+
+def test_recent_activity_share_continuity_ignores_user_issued_invisible_workspace_shares() -> None:
+    outcome = RecentActivityService.read_history_summary(
+        request_auth=_auth('user-collab'),
+        workspace_rows=(
+            _workspace_row(),
+            _workspace_row('ws-002', owner_user_id='user-other', title='Invisible Workspace'),
+        ),
+        membership_rows=(_membership(),),
+        run_rows=(),
+        share_payload_rows=(
+            _share_payload('share-visible', workspace_id='ws-001', issued_by_user_ref='user-collab', updated_at='2026-04-11T12:13:00+00:00'),
+            _share_payload('share-invisible', workspace_id='ws-002', issued_by_user_ref='user-collab', updated_at='2026-04-11T12:14:00+00:00'),
+        ),
+    )
+
+    assert outcome.ok is True
+    assert outcome.response is not None
+    assert outcome.response.recent_share_history_count == 1
+    assert outcome.response.latest_share_id == 'share-visible'
+    assert outcome.response.activity_continuity is not None
+    assert outcome.response.activity_continuity.recent_share_history_count == 1
+    assert outcome.response.activity_continuity.latest_share_id == 'share-visible'
+
 
 def test_recent_activity_accepts_provider_probe_projection_aliases() -> None:
     outcome = RecentActivityService.list_recent_activity(

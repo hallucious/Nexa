@@ -45,12 +45,14 @@ class ProductActivityContinuitySummary:
     recent_provider_binding_count: int = 0
     recent_managed_secret_count: int = 0
     recent_onboarding_count: int = 0
+    recent_share_history_count: int = 0
     latest_activity_at: Optional[str] = None
     latest_run_id: Optional[str] = None
     latest_probe_event_id: Optional[str] = None
     latest_provider_binding_id: Optional[str] = None
     latest_managed_secret_ref: Optional[str] = None
     latest_onboarding_state_id: Optional[str] = None
+    latest_share_id: Optional[str] = None
 
     def __post_init__(self) -> None:
         for field_name in (
@@ -63,6 +65,7 @@ class ProductActivityContinuitySummary:
             "recent_provider_binding_count",
             "recent_managed_secret_count",
             "recent_onboarding_count",
+            "recent_share_history_count",
         ):
             if getattr(self, field_name) < 0:
                 raise ValueError(f"ProductActivityContinuitySummary.{field_name} must be >= 0")
