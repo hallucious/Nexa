@@ -7,6 +7,7 @@ from src.server.auth_adapter import AuthorizationGate
 from src.server.auth_models import AuthorizationInput, RequestAuthContext, WorkspaceAuthorizationContext
 from src.server.provider_probe_history_models import ProviderProbeHistoryRecord
 from src.server.run_recovery_projection import aggregate_recovery_projection_for_runs
+from src.storage.share_api import describe_public_nex_link_share
 from src.server.workspace_onboarding_models import (
     OnboardingReadOutcome,
     OnboardingWriteOutcome,
@@ -83,6 +84,71 @@ def _visible_workspace_ids_for_user(
     ]
 
 
+def _share_workspace_id_from_descriptor(descriptor: Any) -> str | None:
+    storage_role = str(getattr(descriptor, 'storage_role', '') or '').strip()
+    source_working_save_id = str(getattr(descriptor, 'source_working_save_id', '') or '').strip()
+    canonical_ref = str(getattr(descriptor, 'canonical_ref', '') or '').strip()
+    if source_working_save_id:
+        return source_working_save_id
+    if storage_role == 'working_save' and canonical_ref:
+        return canonical_ref
+    return None
+
+
+def _visible_share_descriptors_for_workspace_ids(
+    workspace_ids: Sequence[str],
+    *,
+    user_id: str,
+    share_payload_rows: Sequence[Mapping[str, Any]] = (),
+) -> list[Any]:
+    normalized_ids = {str(workspace_id or '').strip() for workspace_id in workspace_ids if str(workspace_id or '').strip()}
+    normalized_user_id = str(user_id or '').strip()
+    descriptors: list[Any] = []
+    if not normalized_ids or not normalized_user_id:
+        return descriptors
+    for row in share_payload_rows:
+        if not isinstance(row, Mapping):
+            continue
+        try:
+            descriptor = describe_public_nex_link_share(row)
+        except (TypeError, ValueError):
+            continue
+        if str(getattr(descriptor, 'issued_by_user_ref', '') or '').strip() != normalized_user_id:
+            continue
+        workspace_id = _share_workspace_id_from_descriptor(descriptor)
+        if workspace_id not in normalized_ids:
+            continue
+        descriptors.append(descriptor)
+    return descriptors
+
+
+def _share_descriptor_sort_key(descriptor: Any) -> tuple[str, str]:
+    return (
+        str(getattr(descriptor, 'updated_at', '') or getattr(descriptor, 'created_at', '') or '').strip(),
+        str(getattr(descriptor, 'share_id', '') or '').strip(),
+    )
+
+
+def _share_continuity_projection_for_workspace_ids(
+    workspace_ids: Sequence[str],
+    *,
+    user_id: str,
+    share_payload_rows: Sequence[Mapping[str, Any]] = (),
+) -> tuple[int, str | None, str | None]:
+    descriptors = _visible_share_descriptors_for_workspace_ids(
+        workspace_ids,
+        user_id=user_id,
+        share_payload_rows=share_payload_rows,
+    )
+    descriptors.sort(key=_share_descriptor_sort_key, reverse=True)
+    if not descriptors:
+        return 0, None, None
+    latest = descriptors[0]
+    latest_share_at = _share_descriptor_sort_key(latest)[0] or None
+    latest_share_id = str(getattr(latest, 'share_id', '') or '').strip() or None
+    return len(descriptors), latest_share_id, latest_share_at
+
+
 def _latest_run_for_workspace(workspace_id: str, run_rows: Sequence[Mapping[str, Any]]) -> Optional[Mapping[str, Any]]:
     candidates = [row for row in run_rows if str(row.get('workspace_id') or '').strip() == workspace_id]
     if not candidates:
@@ -154,6 +220,7 @@ def _activity_continuity_summary_for_workspace(
     managed_secret_rows: Sequence[Mapping[str, Any]] = (),
     provider_probe_rows: Sequence[Mapping[str, Any]] = (),
     onboarding_rows: Sequence[Mapping[str, Any]] = (),
+    share_payload_rows: Sequence[Mapping[str, Any]] = (),
 ) -> Optional[ProductActivityContinuitySummary]:
     normalized_workspace_id = str(workspace_id or '').strip()
     normalized_user_id = str(user_id or '').strip()
@@ -180,7 +247,12 @@ def _activity_continuity_summary_for_workspace(
         if str(row.get('workspace_id') or '').strip() == normalized_workspace_id
         and str(row.get('user_id') or '').strip() == normalized_user_id
     ]
-    if not filtered_runs and not filtered_binding_rows and not filtered_secret_rows and not filtered_probe_rows and not filtered_onboarding_rows:
+    recent_share_history_count, latest_share_id, latest_share_at = _share_continuity_projection_for_workspace_ids(
+        (normalized_workspace_id,),
+        user_id=normalized_user_id,
+        share_payload_rows=share_payload_rows,
+    )
+    if not filtered_runs and not filtered_binding_rows and not filtered_secret_rows and not filtered_probe_rows and not filtered_onboarding_rows and recent_share_history_count <= 0:
         return None
     latest_run_at = None
     latest_run_id = None
@@ -217,6 +289,7 @@ def _activity_continuity_summary_for_workspace(
             latest_secret_at,
             latest_probe.occurred_at if latest_probe is not None else None,
             latest_onboarding_at,
+            latest_share_at,
         ) if value
     ], default=None)
     pending_run_count = sum(1 for row in filtered_runs if str(row.get('status_family') or '').strip() == 'pending')
@@ -233,12 +306,14 @@ def _activity_continuity_summary_for_workspace(
         recent_provider_binding_count=len(filtered_binding_rows),
         recent_managed_secret_count=len(filtered_secret_rows),
         recent_onboarding_count=len(filtered_onboarding_rows),
+        recent_share_history_count=recent_share_history_count,
         latest_activity_at=latest_activity_at,
         latest_run_id=latest_run_id,
         latest_probe_event_id=latest_probe.probe_event_id if latest_probe is not None else None,
         latest_provider_binding_id=latest_binding_id,
         latest_managed_secret_ref=latest_secret_ref,
         latest_onboarding_state_id=latest_onboarding_state_id,
+        latest_share_id=latest_share_id,
     )
 
 
@@ -308,6 +383,7 @@ def _activity_continuity_summary_for_workspace_ids(
     managed_secret_rows: Sequence[Mapping[str, Any]] = (),
     provider_probe_rows: Sequence[Mapping[str, Any]] = (),
     onboarding_rows: Sequence[Mapping[str, Any]] = (),
+    share_payload_rows: Sequence[Mapping[str, Any]] = (),
 ) -> Optional[ProductActivityContinuitySummary]:
     normalized_ids = {str(workspace_id or '').strip() for workspace_id in workspace_ids if str(workspace_id or '').strip()}
     normalized_user_id = str(user_id or '').strip()
@@ -334,7 +410,12 @@ def _activity_continuity_summary_for_workspace_ids(
         if str(row.get('workspace_id') or '').strip() in normalized_ids
         and str(row.get('user_id') or '').strip() == normalized_user_id
     ]
-    if not filtered_runs and not filtered_binding_rows and not filtered_secret_rows and not filtered_probe_rows and not filtered_onboarding_rows:
+    recent_share_history_count, latest_share_id, latest_share_at = _share_continuity_projection_for_workspace_ids(
+        tuple(normalized_ids),
+        user_id=normalized_user_id,
+        share_payload_rows=share_payload_rows,
+    )
+    if not filtered_runs and not filtered_binding_rows and not filtered_secret_rows and not filtered_probe_rows and not filtered_onboarding_rows and recent_share_history_count <= 0:
         return None
     latest_run_at = None
     latest_run_id = None
@@ -371,6 +452,7 @@ def _activity_continuity_summary_for_workspace_ids(
             latest_secret_at,
             latest_probe.occurred_at if latest_probe is not None else None,
             latest_onboarding_at,
+            latest_share_at,
         ) if value
     ], default=None)
     pending_run_count = sum(1 for row in filtered_runs if str(row.get('status_family') or '').strip() == 'pending')
@@ -387,12 +469,14 @@ def _activity_continuity_summary_for_workspace_ids(
         recent_provider_binding_count=len(filtered_binding_rows),
         recent_managed_secret_count=len(filtered_secret_rows),
         recent_onboarding_count=len(filtered_onboarding_rows),
+        recent_share_history_count=recent_share_history_count,
         latest_activity_at=latest_activity_at,
         latest_run_id=latest_run_id,
         latest_probe_event_id=latest_probe.probe_event_id if latest_probe is not None else None,
         latest_provider_binding_id=latest_binding_id,
         latest_managed_secret_ref=latest_secret_ref,
         latest_onboarding_state_id=latest_onboarding_state_id,
+        latest_share_id=latest_share_id,
     )
 
 
@@ -405,6 +489,7 @@ def _continuity_projection_for_workspace_ids(
     managed_secret_rows: Sequence[Mapping[str, Any]] = (),
     provider_probe_rows: Sequence[Mapping[str, Any]] = (),
     onboarding_rows: Sequence[Mapping[str, Any]] = (),
+    share_payload_rows: Sequence[Mapping[str, Any]] = (),
 ) -> tuple[Optional[ProductProviderContinuitySummary], Optional[ProductActivityContinuitySummary]]:
     return (
         _provider_continuity_summary_for_workspace_ids(
@@ -421,6 +506,7 @@ def _continuity_projection_for_workspace_ids(
             managed_secret_rows=managed_secret_rows,
             provider_probe_rows=provider_probe_rows,
             onboarding_rows=onboarding_rows,
+            share_payload_rows=share_payload_rows,
         ),
     )
 
@@ -435,6 +521,7 @@ def _detail_from_workspace_row(
     managed_secret_rows: Sequence[Mapping[str, Any]] = (),
     provider_probe_rows: Sequence[Mapping[str, Any]] = (),
     onboarding_rows: Sequence[Mapping[str, Any]] = (),
+    share_payload_rows: Sequence[Mapping[str, Any]] = (),
 ) -> ProductWorkspaceDetailResponse:
     workspace_id = str(workspace_row.get('workspace_id') or '').strip()
     latest_run = _latest_run_for_workspace(workspace_id, recent_run_rows)
@@ -464,6 +551,7 @@ def _detail_from_workspace_row(
         managed_secret_rows=managed_secret_rows,
         provider_probe_rows=provider_probe_rows,
         onboarding_rows=onboarding_rows,
+        share_payload_rows=share_payload_rows,
     )
     return ProductWorkspaceDetailResponse(
         workspace_id=workspace_id,
@@ -497,6 +585,7 @@ def _continuity_projection_for_workspace(
     managed_secret_rows: Sequence[Mapping[str, Any]] = (),
     provider_probe_rows: Sequence[Mapping[str, Any]] = (),
     onboarding_rows: Sequence[Mapping[str, Any]] = (),
+    share_payload_rows: Sequence[Mapping[str, Any]] = (),
 ) -> tuple[Optional[str], Optional[ProductProviderContinuitySummary], Optional[ProductActivityContinuitySummary]]:
     normalized_workspace_id = str(workspace_id or '').strip()
     if not normalized_workspace_id:
@@ -516,6 +605,7 @@ def _continuity_projection_for_workspace(
         managed_secret_rows=managed_secret_rows,
         provider_probe_rows=provider_probe_rows,
         onboarding_rows=onboarding_rows,
+        share_payload_rows=share_payload_rows,
     )
     return workspace_title, provider_continuity, activity_continuity
 
@@ -534,6 +624,7 @@ class WorkspaceRegistryService:
         managed_secret_rows: Sequence[Mapping[str, Any]] = (),
         provider_probe_rows: Sequence[Mapping[str, Any]] = (),
         onboarding_rows: Sequence[Mapping[str, Any]] = (),
+        share_payload_rows: Sequence[Mapping[str, Any]] = (),
     ) -> WorkspaceListOutcome:
         if not request_auth.is_authenticated:
             return WorkspaceListOutcome(
@@ -559,6 +650,7 @@ class WorkspaceRegistryService:
                 managed_secret_rows=managed_secret_rows,
                 provider_probe_rows=provider_probe_rows,
                 onboarding_rows=onboarding_rows,
+                share_payload_rows=share_payload_rows,
             )
             visible.append(
                 ProductWorkspaceSummaryView(
@@ -589,6 +681,7 @@ class WorkspaceRegistryService:
             managed_secret_rows=managed_secret_rows,
             provider_probe_rows=provider_probe_rows,
             onboarding_rows=onboarding_rows,
+            share_payload_rows=share_payload_rows,
         )
         return WorkspaceListOutcome(
             response=ProductWorkspaceListResponse(
@@ -612,6 +705,7 @@ class WorkspaceRegistryService:
         managed_secret_rows: Sequence[Mapping[str, Any]] = (),
         provider_probe_rows: Sequence[Mapping[str, Any]] = (),
         onboarding_rows: Sequence[Mapping[str, Any]] = (),
+        share_payload_rows: Sequence[Mapping[str, Any]] = (),
     ) -> WorkspaceReadOutcome:
         if not request_auth.is_authenticated:
             return WorkspaceReadOutcome(
@@ -650,6 +744,7 @@ class WorkspaceRegistryService:
                 managed_secret_rows=managed_secret_rows,
                 provider_probe_rows=provider_probe_rows,
                 onboarding_rows=onboarding_rows,
+                share_payload_rows=share_payload_rows,
             )
             return WorkspaceReadOutcome(
                 rejected=ProductWorkspaceReadRejectedResponse(
@@ -672,6 +767,7 @@ class WorkspaceRegistryService:
             managed_secret_rows=managed_secret_rows,
             provider_probe_rows=provider_probe_rows,
             onboarding_rows=onboarding_rows,
+            share_payload_rows=share_payload_rows,
         )
         return WorkspaceReadOutcome(response=detail)
 
@@ -691,6 +787,7 @@ class WorkspaceRegistryService:
         managed_secret_rows: Sequence[Mapping[str, Any]] = (),
         provider_probe_rows: Sequence[Mapping[str, Any]] = (),
         onboarding_rows: Sequence[Mapping[str, Any]] = (),
+        share_payload_rows: Sequence[Mapping[str, Any]] = (),
     ) -> WorkspaceWriteOutcome:
         if not request_auth.is_authenticated:
             return WorkspaceWriteOutcome(
@@ -734,6 +831,7 @@ class WorkspaceRegistryService:
             managed_secret_rows=managed_secret_rows,
             provider_probe_rows=provider_probe_rows,
             onboarding_rows=onboarding_rows,
+            share_payload_rows=share_payload_rows,
         )
         visible_workspace_ids = _visible_workspace_ids_for_user(owner_user_id, combined_workspace_rows, combined_membership_rows)
         provider_continuity, activity_continuity = _continuity_projection_for_workspace_ids(
@@ -744,6 +842,7 @@ class WorkspaceRegistryService:
             managed_secret_rows=managed_secret_rows,
             provider_probe_rows=provider_probe_rows,
             onboarding_rows=onboarding_rows,
+            share_payload_rows=share_payload_rows,
         )
         return WorkspaceWriteOutcome(
             accepted=ProductWorkspaceWriteAcceptedResponse(
@@ -803,6 +902,7 @@ class OnboardingContinuityService:
         provider_binding_rows: Sequence[Mapping[str, Any]] = (),
         managed_secret_rows: Sequence[Mapping[str, Any]] = (),
         provider_probe_rows: Sequence[Mapping[str, Any]] = (),
+        share_payload_rows: Sequence[Mapping[str, Any]] = (),
     ) -> OnboardingReadOutcome:
         if not request_auth.is_authenticated:
             return OnboardingReadOutcome(
@@ -841,6 +941,7 @@ class OnboardingContinuityService:
                     managed_secret_rows=managed_secret_rows,
                     provider_probe_rows=provider_probe_rows,
                     onboarding_rows=onboarding_rows,
+                    share_payload_rows=share_payload_rows,
                 )
                 return OnboardingReadOutcome(
                     rejected=ProductOnboardingRejectedResponse(
@@ -879,6 +980,7 @@ class OnboardingContinuityService:
                 managed_secret_rows=managed_secret_rows,
                 provider_probe_rows=provider_probe_rows,
                 onboarding_rows=onboarding_rows,
+                share_payload_rows=share_payload_rows,
             )
         else:
             visible_workspace_ids = _visible_workspace_ids_for_user(
@@ -894,6 +996,7 @@ class OnboardingContinuityService:
                 managed_secret_rows=managed_secret_rows,
                 provider_probe_rows=provider_probe_rows,
                 onboarding_rows=onboarding_rows,
+                share_payload_rows=share_payload_rows,
             )
         return OnboardingReadOutcome(
             response=ProductOnboardingReadResponse(
@@ -922,6 +1025,7 @@ class OnboardingContinuityService:
         provider_binding_rows: Sequence[Mapping[str, Any]] = (),
         managed_secret_rows: Sequence[Mapping[str, Any]] = (),
         provider_probe_rows: Sequence[Mapping[str, Any]] = (),
+        share_payload_rows: Sequence[Mapping[str, Any]] = (),
     ) -> OnboardingWriteOutcome:
         if not request_auth.is_authenticated:
             return OnboardingWriteOutcome(
@@ -960,6 +1064,7 @@ class OnboardingContinuityService:
                     managed_secret_rows=managed_secret_rows,
                     provider_probe_rows=provider_probe_rows,
                     onboarding_rows=onboarding_rows,
+                    share_payload_rows=share_payload_rows,
                 )
                 return OnboardingWriteOutcome(
                     rejected=ProductOnboardingRejectedResponse(
@@ -1012,6 +1117,7 @@ class OnboardingContinuityService:
                 managed_secret_rows=managed_secret_rows,
                 provider_probe_rows=provider_probe_rows,
                 onboarding_rows=activity_rows,
+                share_payload_rows=share_payload_rows,
             )
         else:
             visible_workspace_ids = _visible_workspace_ids_for_user(
@@ -1027,6 +1133,7 @@ class OnboardingContinuityService:
                 managed_secret_rows=managed_secret_rows,
                 provider_probe_rows=provider_probe_rows,
                 onboarding_rows=activity_rows,
+                share_payload_rows=share_payload_rows,
             )
         return OnboardingWriteOutcome(
             accepted=ProductOnboardingWriteAcceptedResponse(

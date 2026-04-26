@@ -5611,6 +5611,7 @@ class RunHttpRouteSurface:
         managed_secret_rows: list[Mapping[str, Any]] | tuple[Mapping[str, Any], ...] = (),
         provider_probe_rows: list[Mapping[str, Any]] | tuple[Mapping[str, Any], ...] = (),
         onboarding_rows: list[Mapping[str, Any]] | tuple[Mapping[str, Any], ...] = (),
+        share_payload_rows: list[Mapping[str, Any]] | tuple[Mapping[str, Any], ...] = (),
     ) -> HttpRouteResponse:
         if http_request.method != "GET":
             return _route_response(405, {"error_family": "route_error", "reason_code": "route.method_not_allowed", "message": "Workspace list route only supports GET."})
@@ -5625,6 +5626,7 @@ class RunHttpRouteSurface:
             managed_secret_rows=managed_secret_rows,
             provider_probe_rows=provider_probe_rows,
             onboarding_rows=onboarding_rows,
+            share_payload_rows=share_payload_rows,
         )
         if outcome.ok:
             assert outcome.response is not None
@@ -6096,6 +6098,7 @@ class RunHttpRouteSurface:
         managed_secret_rows: list[Mapping[str, Any]] | tuple[Mapping[str, Any], ...] = (),
         provider_probe_rows: list[Mapping[str, Any]] | tuple[Mapping[str, Any], ...] = (),
         onboarding_rows: list[Mapping[str, Any]] | tuple[Mapping[str, Any], ...] = (),
+        share_payload_rows: list[Mapping[str, Any]] | tuple[Mapping[str, Any], ...] = (),
     ) -> HttpRouteResponse:
         if http_request.method != "GET":
             return _route_response(405, {"error_family": "route_error", "reason_code": "route.method_not_allowed", "message": "Workspace circuit library route only supports GET."})
@@ -6623,6 +6626,8 @@ class RunHttpRouteSurface:
         provider_binding_rows: list[Mapping[str, Any]] | tuple[Mapping[str, Any], ...] = (),
         managed_secret_rows: list[Mapping[str, Any]] | tuple[Mapping[str, Any], ...] = (),
         provider_probe_rows: list[Mapping[str, Any]] | tuple[Mapping[str, Any], ...] = (),
+        onboarding_rows: list[Mapping[str, Any]] | tuple[Mapping[str, Any], ...] = (),
+        share_payload_rows: list[Mapping[str, Any]] | tuple[Mapping[str, Any], ...] = (),
     ) -> HttpRouteResponse:
         if http_request.method != "GET":
             return _route_response(405, {"error_family": "route_error", "reason_code": "route.method_not_allowed", "message": "Workspace detail route only supports GET."})
@@ -6641,6 +6646,8 @@ class RunHttpRouteSurface:
             provider_binding_rows=provider_binding_rows,
             managed_secret_rows=managed_secret_rows,
             provider_probe_rows=provider_probe_rows,
+            onboarding_rows=onboarding_rows,
+            share_payload_rows=share_payload_rows,
         )
         if outcome.ok:
             assert outcome.response is not None
@@ -6667,6 +6674,7 @@ class RunHttpRouteSurface:
         managed_secret_rows: Sequence[Mapping[str, Any]] = (),
         provider_probe_rows: Sequence[Mapping[str, Any]] = (),
         onboarding_rows: Sequence[Mapping[str, Any]] = (),
+        share_payload_rows: Sequence[Mapping[str, Any]] = (),
         workspace_registry_writer: Callable[[Mapping[str, Any], Mapping[str, Any]], Any] | None = None,
     ) -> HttpRouteResponse:
         if http_request.method != "POST":
@@ -6701,6 +6709,7 @@ class RunHttpRouteSurface:
             managed_secret_rows=managed_secret_rows,
             provider_probe_rows=provider_probe_rows,
             onboarding_rows=onboarding_rows,
+            share_payload_rows=share_payload_rows,
         )
         if outcome.ok:
             assert outcome.accepted is not None
@@ -6732,6 +6741,7 @@ class RunHttpRouteSurface:
         provider_binding_rows: list[Mapping[str, Any]] | tuple[Mapping[str, Any], ...] = (),
         managed_secret_rows: list[Mapping[str, Any]] | tuple[Mapping[str, Any], ...] = (),
         provider_probe_rows: list[Mapping[str, Any]] | tuple[Mapping[str, Any], ...] = (),
+        share_payload_rows: list[Mapping[str, Any]] | tuple[Mapping[str, Any], ...] = (),
     ) -> HttpRouteResponse:
         if http_request.method != "GET":
             return _route_response(405, {"error_family": "route_error", "reason_code": "route.method_not_allowed", "message": "Onboarding route only supports GET."})
@@ -6750,6 +6760,7 @@ class RunHttpRouteSurface:
             provider_binding_rows=provider_binding_rows,
             managed_secret_rows=managed_secret_rows,
             provider_probe_rows=provider_probe_rows,
+            share_payload_rows=share_payload_rows,
         )
         if outcome.ok:
             assert outcome.response is not None
@@ -6785,6 +6796,7 @@ class RunHttpRouteSurface:
         provider_binding_rows: list[Mapping[str, Any]] | tuple[Mapping[str, Any], ...] = (),
         managed_secret_rows: list[Mapping[str, Any]] | tuple[Mapping[str, Any], ...] = (),
         provider_probe_rows: list[Mapping[str, Any]] | tuple[Mapping[str, Any], ...] = (),
+        share_payload_rows: list[Mapping[str, Any]] | tuple[Mapping[str, Any], ...] = (),
         onboarding_state_writer: Callable[[Mapping[str, Any]], Any] | None = None,
     ) -> HttpRouteResponse:
         if http_request.method != "PUT":
@@ -6822,6 +6834,7 @@ class RunHttpRouteSurface:
             provider_binding_rows=provider_binding_rows,
             managed_secret_rows=managed_secret_rows,
             provider_probe_rows=provider_probe_rows,
+            share_payload_rows=share_payload_rows,
         )
         if outcome.ok:
             assert outcome.accepted is not None

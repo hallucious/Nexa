@@ -8,6 +8,7 @@ from src.server import (
     WorkspaceAuthorizationContext,
     WorkspaceRegistryService,
 )
+from src.storage.share_api import export_public_nex_link_share
 
 
 def _auth(user_id: str = 'user-owner'):
@@ -37,6 +38,39 @@ def _workspace_row(workspace_id: str = 'ws-001', *, owner_user_id: str = 'user-o
         'continuity_source': 'server',
         'archived': False,
     }
+
+
+def _working_save_artifact(workspace_id: str = 'ws-001') -> dict:
+    return {
+        'meta': {
+            'format_version': '1.0.0',
+            'storage_role': 'working_save',
+            'working_save_id': workspace_id,
+            'name': 'Primary Workspace',
+        },
+        'circuit': {'nodes': [], 'edges': [], 'entry': None, 'outputs': []},
+        'resources': {'prompts': {}, 'providers': {}, 'plugins': {}},
+        'state': {'input': {}, 'working': {}, 'memory': {}},
+        'runtime': {'status': 'draft', 'validation_summary': {}, 'last_run': {}, 'errors': []},
+        'ui': {'layout': {}, 'metadata': {}},
+    }
+
+
+def _share_payload(
+    share_id: str = 'share-001',
+    *,
+    workspace_id: str = 'ws-001',
+    issued_by_user_ref: str = 'user-collab',
+    updated_at: str = '2026-04-11T12:10:30+00:00',
+) -> dict:
+    return export_public_nex_link_share(
+        _working_save_artifact(workspace_id),
+        share_id=share_id,
+        title='Workspace Continuity Share',
+        created_at='2026-04-11T12:05:00+00:00',
+        updated_at=updated_at,
+        issued_by_user_ref=issued_by_user_ref,
+    )
 
 
 def _membership(workspace_id: str = 'ws-001', *, user_id: str = 'user-collab', role: str = 'collaborator') -> dict:
@@ -408,3 +442,106 @@ def test_workspace_registry_projects_aggregated_recovery_state() -> None:
     assert read_outcome.response.recovery_state == 'manual_review_required'
     assert read_outcome.response.orphan_review_required is True
     assert read_outcome.response.worker_attempt_number == 3
+
+def test_workspace_registry_continuity_includes_visible_share_history() -> None:
+    share_rows = (
+        _share_payload('share-visible', workspace_id='ws-001', issued_by_user_ref='user-collab', updated_at='2026-04-11T12:10:30+00:00'),
+        _share_payload('share-hidden-workspace', workspace_id='ws-002', issued_by_user_ref='user-collab', updated_at='2026-04-11T12:11:30+00:00'),
+        _share_payload('share-other-user', workspace_id='ws-001', issued_by_user_ref='user-other', updated_at='2026-04-11T12:12:30+00:00'),
+    )
+
+    list_outcome = WorkspaceRegistryService.list_workspaces(
+        request_auth=_auth('user-collab'),
+        workspace_rows=(
+            _workspace_row(),
+            _workspace_row('ws-002', owner_user_id='user-other', title='Hidden Workspace'),
+        ),
+        membership_rows=(_membership(),),
+        share_payload_rows=share_rows,
+    )
+
+    assert list_outcome.ok is True
+    assert list_outcome.response is not None
+    assert list_outcome.response.activity_continuity is not None
+    assert list_outcome.response.activity_continuity.recent_share_history_count == 1
+    assert list_outcome.response.activity_continuity.latest_share_id == 'share-visible'
+    assert list_outcome.response.activity_continuity.latest_activity_at == '2026-04-11T12:10:30+00:00'
+    assert list_outcome.response.workspaces[0].activity_continuity is not None
+    assert list_outcome.response.workspaces[0].activity_continuity.recent_share_history_count == 1
+    assert list_outcome.response.workspaces[0].activity_continuity.latest_share_id == 'share-visible'
+
+    read_outcome = WorkspaceRegistryService.read_workspace(
+        request_auth=_auth('user-collab'),
+        workspace_context=_workspace_context(),
+        workspace_row=_workspace_row(),
+        membership_rows=(_membership(),),
+        share_payload_rows=share_rows,
+    )
+
+    assert read_outcome.ok is True
+    assert read_outcome.response is not None
+    assert read_outcome.response.activity_continuity is not None
+    assert read_outcome.response.activity_continuity.recent_share_history_count == 1
+    assert read_outcome.response.activity_continuity.latest_share_id == 'share-visible'
+
+
+def test_onboarding_continuity_includes_visible_share_history() -> None:
+    share_rows = (
+        _share_payload('share-visible', workspace_id='ws-001', issued_by_user_ref='user-collab', updated_at='2026-04-11T12:10:30+00:00'),
+        _share_payload('share-hidden-workspace', workspace_id='ws-002', issued_by_user_ref='user-collab', updated_at='2026-04-11T12:11:30+00:00'),
+        _share_payload('share-other-user', workspace_id='ws-001', issued_by_user_ref='user-other', updated_at='2026-04-11T12:12:30+00:00'),
+    )
+
+    account_outcome = OnboardingContinuityService.read_onboarding_state(
+        request_auth=_auth('user-collab'),
+        workspace_rows=(
+            _workspace_row(),
+            _workspace_row('ws-002', owner_user_id='user-other', title='Hidden Workspace'),
+        ),
+        membership_rows=(_membership(),),
+        share_payload_rows=share_rows,
+    )
+
+    assert account_outcome.ok is True
+    assert account_outcome.response is not None
+    assert account_outcome.response.activity_continuity is not None
+    assert account_outcome.response.activity_continuity.recent_share_history_count == 1
+    assert account_outcome.response.activity_continuity.latest_share_id == 'share-visible'
+    assert account_outcome.response.activity_continuity.latest_activity_at == '2026-04-11T12:10:30+00:00'
+
+    workspace_outcome = OnboardingContinuityService.read_onboarding_state(
+        request_auth=_auth('user-collab'),
+        workspace_context=_workspace_context(),
+        workspace_id='ws-001',
+        share_payload_rows=share_rows,
+    )
+
+    assert workspace_outcome.ok is True
+    assert workspace_outcome.response is not None
+    assert workspace_outcome.response.activity_continuity is not None
+    assert workspace_outcome.response.activity_continuity.recent_share_history_count == 1
+    assert workspace_outcome.response.activity_continuity.latest_share_id == 'share-visible'
+
+
+def test_onboarding_write_rejected_response_includes_share_continuity_projection() -> None:
+    forbidden_auth = _forbidden_auth('user-stranger')
+    share_rows = (
+        _share_payload('share-visible', workspace_id='ws-001', issued_by_user_ref='user-stranger', updated_at='2026-04-11T12:10:30+00:00'),
+    )
+
+    outcome = OnboardingContinuityService.upsert_onboarding_state(
+        request_auth=forbidden_auth,
+        request=ProductOnboardingWriteRequest(workspace_id='ws-001', current_step='history-ready'),
+        onboarding_rows=(),
+        workspace_context=_workspace_context(),
+        onboarding_state_id_factory=lambda: 'onboard-001',
+        now_iso='2026-04-11T14:00:00+00:00',
+        share_payload_rows=share_rows,
+    )
+
+    assert outcome.ok is False
+    assert outcome.rejected is not None
+    assert outcome.rejected.activity_continuity is not None
+    assert outcome.rejected.activity_continuity.recent_share_history_count == 1
+    assert outcome.rejected.activity_continuity.latest_share_id == 'share-visible'
+
