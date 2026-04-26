@@ -356,6 +356,61 @@ def test_recent_activity_route_family_round_trip() -> None:
     assert summary_response.body['latest_onboarding_state_id'] == 'onboard-001'
 
 
+
+def test_recent_activity_service_includes_visible_share_lifecycle_events() -> None:
+    outcome = RecentActivityService.list_recent_activity(
+        request_auth=_auth('user-collab'),
+        workspace_rows=(_workspace_row(), _workspace_row('ws-002', owner_user_id='user-other', title='Other Workspace')),
+        membership_rows=(_membership(),),
+        run_rows=(),
+        share_payload_rows=(
+            _share_payload('share-001', workspace_id='ws-001', issued_by_user_ref='user-collab', updated_at='2026-04-11T12:13:00+00:00'),
+            _share_payload('share-foreign', workspace_id='ws-002', issued_by_user_ref='user-other', updated_at='2026-04-11T12:14:00+00:00'),
+        ),
+        limit=10,
+    )
+
+    assert outcome.ok is True
+    assert outcome.response is not None
+    assert outcome.response.total_visible_count == 2
+
+    share_item = next(item for item in outcome.response.activities if item.activity_type == 'share_created')
+    assert share_item.share_id == 'share-001'
+    assert share_item.share_path == '/share/share-001'
+    assert share_item.workspace_id == 'ws-001'
+    assert share_item.actor_user_id == 'user-collab'
+    assert share_item.status == 'active'
+    assert share_item.source_artifact is not None
+    assert share_item.source_artifact.storage_role == 'working_save'
+    assert share_item.links.public_share == '/share/share-001'
+    assert share_item.links.public_share_management == '/api/users/me/public-shares/share-001'
+    assert 'share' in (share_item.summary or '').lower()
+
+
+def test_recent_activity_route_includes_share_payload_rows() -> None:
+    activity_response = RunHttpRouteSurface.handle_recent_activity(
+        http_request=HttpRouteRequest(
+            method='GET',
+            path='/api/users/me/activity',
+            headers={'Authorization': 'Bearer token'},
+            session_claims={'sub': 'user-collab', 'sid': 'sess-001', 'exp': 4102444800, 'roles': ['editor']},
+            query_params={'limit': 10},
+        ),
+        workspace_rows=(_workspace_row(),),
+        membership_rows=(_membership(),),
+        run_rows=(),
+        share_payload_rows=(
+            _share_payload('share-002', workspace_id='ws-001', issued_by_user_ref='user-collab', updated_at='2026-04-11T12:14:00+00:00'),
+        ),
+    )
+
+    assert activity_response.status_code == 200
+    share_item = next(item for item in activity_response.body['activities'] if item['activity_type'] == 'share_created')
+    assert share_item['share_id'] == 'share-002'
+    assert share_item['share_path'] == '/share/share-002'
+    assert share_item['links']['public_share'] == '/share/share-002'
+    assert share_item['links']['public_share_management'] == '/api/users/me/public-shares/share-002'
+
 def test_recent_activity_accepts_provider_probe_projection_aliases() -> None:
     outcome = RecentActivityService.list_recent_activity(
         request_auth=_auth('user-collab'),

@@ -130,6 +130,7 @@ class FastApiRouteBindings:
                 provider_probe_rows=self.dependencies.recent_provider_probe_rows_provider(),
                 provider_binding_rows=self.dependencies.recent_provider_binding_rows_provider(),
                 managed_secret_rows=self.dependencies.recent_managed_secret_rows_provider(),
+                share_payload_rows=self.dependencies.public_share_payload_rows_provider(),
             )
             return self._framework_response(outbound)
 

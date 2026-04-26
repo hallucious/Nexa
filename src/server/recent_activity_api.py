@@ -9,6 +9,7 @@ from src.server.auth_models import RequestAuthContext
 from src.server.provider_probe_history_models import ProviderProbeHistoryRecord
 from src.server.run_recovery_projection import recovery_projection_from_run_row
 from src.server.run_read_api import _source_artifact_view_from_sources
+from src.server.run_read_models import ProductSourceArtifactView
 from src.server.recent_activity_models import (
     HistorySummaryReadOutcome,
     ProductHistorySummaryResponse,
@@ -54,6 +55,17 @@ def _workspace_row_by_id(workspace_rows: Sequence[Mapping[str, Any]], workspace_
     return None
 
 
+def _share_workspace_id_from_descriptor(descriptor: Any) -> str | None:
+    explicit_source_id = str(getattr(descriptor, 'source_working_save_id', '') or '').strip()
+    if explicit_source_id:
+        return explicit_source_id
+    storage_role = str(getattr(descriptor, 'storage_role', '') or '').strip()
+    canonical_ref = str(getattr(descriptor, 'canonical_ref', '') or '').strip()
+    if storage_role == 'working_save' and canonical_ref:
+        return canonical_ref
+    return None
+
+
 def _visible_share_rows(
     *,
     request_auth: RequestAuthContext,
@@ -69,7 +81,7 @@ def _visible_share_rows(
         except Exception:
             continue
         issuer_user_ref = str(descriptor.issued_by_user_ref or '').strip()
-        source_workspace_id = str(descriptor.source_working_save_id or '').strip() or None
+        source_workspace_id = _share_workspace_id_from_descriptor(descriptor)
         if requested_user_ref and issuer_user_ref != requested_user_ref:
             continue
         if requested_workspace_id is not None and source_workspace_id != requested_workspace_id:
@@ -155,6 +167,50 @@ def _binding_activity_status(row: Mapping[str, Any]) -> str:
     return 'configured'
 
 
+_SHARE_AUDIT_ACTIVITY_TYPES = {
+    'created': 'share_created',
+    'expiration_extended': 'share_expiration_extended',
+    'revoked': 'share_revoked',
+    'archived': 'share_archived',
+    'unarchived': 'share_unarchived',
+}
+
+
+def _share_activity_type(event_type: str | None) -> str:
+    normalized = str(event_type or '').strip()
+    return _SHARE_AUDIT_ACTIVITY_TYPES.get(normalized, 'share_updated')
+
+
+def _share_activity_summary(*, title: str, activity_type: str, lifecycle_state: str | None) -> str:
+    status = str(lifecycle_state or '').strip() or 'updated'
+    if activity_type == 'share_created':
+        return f'Public share "{title}" was created.'
+    if activity_type == 'share_expiration_extended':
+        return f'Public share "{title}" expiration was extended.'
+    if activity_type == 'share_revoked':
+        return f'Public share "{title}" was revoked.'
+    if activity_type == 'share_archived':
+        return f'Public share "{title}" was archived.'
+    if activity_type == 'share_unarchived':
+        return f'Public share "{title}" was unarchived.'
+    return f'Public share "{title}" is {status}.'
+
+
+def _source_artifact_view_from_share_descriptor(descriptor: Any) -> ProductSourceArtifactView | None:
+    storage_role = str(getattr(descriptor, 'storage_role', '') or '').strip()
+    canonical_ref = str(getattr(descriptor, 'canonical_ref', '') or '').strip()
+    if storage_role not in {'working_save', 'commit_snapshot'} or not canonical_ref:
+        return None
+    source_working_save_id = _share_workspace_id_from_descriptor(descriptor)
+    return ProductSourceArtifactView(
+        storage_role=storage_role,
+        canonical_ref=canonical_ref,
+        working_save_id=canonical_ref if storage_role == 'working_save' else None,
+        commit_id=canonical_ref if storage_role == 'commit_snapshot' else None,
+        source_working_save_id=source_working_save_id,
+    )
+
+
 class RecentActivityService:
     @classmethod
     def list_recent_activity(
@@ -168,6 +224,7 @@ class RecentActivityService:
         provider_probe_rows: Sequence[Mapping[str, Any]] = (),
         provider_binding_rows: Sequence[Mapping[str, Any]] = (),
         managed_secret_rows: Sequence[Mapping[str, Any]] = (),
+        share_payload_rows: Sequence[Mapping[str, Any]] = (),
         workspace_id: Optional[str] = None,
         limit: int = 20,
         cursor: Optional[str] = None,
@@ -379,6 +436,56 @@ class RecentActivityService:
                         provider_binding=f'/api/workspaces/{row_workspace_id}/provider-bindings/{provider_key}',
                         provider_health=f'/api/workspaces/{row_workspace_id}/provider-bindings/{provider_key}/health',
                         managed_secret=secret_ref,
+                    ),
+                )
+            )
+
+        filtered_share_rows = list(
+            _visible_share_rows(
+                request_auth=request_auth,
+                share_payload_rows=share_payload_rows,
+                workspace_id=workspace_id,
+            )
+        )
+        for row in filtered_share_rows:
+            try:
+                descriptor = describe_public_nex_link_share(dict(row))
+            except Exception:
+                continue
+            share_id = str(descriptor.share_id or '').strip()
+            occurred_at = str(descriptor.last_audit_event_at or descriptor.updated_at or descriptor.created_at or '').strip()
+            source_workspace_id = _share_workspace_id_from_descriptor(descriptor) or ''
+            if not share_id or not occurred_at or not source_workspace_id:
+                continue
+            if source_workspace_id not in visible_ids:
+                continue
+            if workspace_id is not None and source_workspace_id != workspace_id:
+                continue
+            workspace_title = titles.get(source_workspace_id, source_workspace_id)
+            activity_type = _share_activity_type(descriptor.last_audit_event_type)
+            lifecycle_state = str(descriptor.lifecycle_state or '').strip() or None
+            title = str(descriptor.title or share_id).strip() or share_id
+            activities.append(
+                ProductRecentActivityItemView(
+                    activity_id=f'share:{share_id}:{activity_type}:{occurred_at}',
+                    activity_type=activity_type,
+                    occurred_at=occurred_at,
+                    workspace_id=source_workspace_id,
+                    workspace_title=workspace_title,
+                    share_id=share_id,
+                    share_path=descriptor.share_path,
+                    source_artifact=_source_artifact_view_from_share_descriptor(descriptor),
+                    status=lifecycle_state,
+                    summary=_share_activity_summary(
+                        title=title,
+                        activity_type=activity_type,
+                        lifecycle_state=lifecycle_state,
+                    ),
+                    actor_user_id=str(descriptor.issued_by_user_ref or '').strip() or None,
+                    links=ProductRecentActivityLinks(
+                        workspace=f'/api/workspaces/{source_workspace_id}',
+                        public_share=descriptor.share_path,
+                        public_share_management=f'/api/users/me/public-shares/{share_id}',
                     ),
                 )
             )

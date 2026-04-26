@@ -22,6 +22,12 @@ _ALLOWED_ACTIVITY_TYPES = {
     "provider_probe_failed",
     "provider_binding_updated",
     "managed_secret_updated",
+    "share_created",
+    "share_updated",
+    "share_expiration_extended",
+    "share_revoked",
+    "share_archived",
+    "share_unarchived",
 }
 _ALLOWED_HISTORY_SUMMARY_SCOPES = {"account", "workspace"}
 
@@ -36,6 +42,8 @@ class ProductRecentActivityLinks:
     provider_health: Optional[str] = None
     provider_probe_history: Optional[str] = None
     managed_secret: Optional[str] = None
+    public_share: Optional[str] = None
+    public_share_management: Optional[str] = None
 
 
 @dataclass(frozen=True)
@@ -46,6 +54,8 @@ class ProductRecentActivityItemView:
     workspace_id: str
     workspace_title: str
     run_id: Optional[str] = None
+    share_id: Optional[str] = None
+    share_path: Optional[str] = None
     source_artifact: Optional[ProductSourceArtifactView] = None
     status: Optional[str] = None
     status_family: Optional[str] = None

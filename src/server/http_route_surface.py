@@ -6856,6 +6856,7 @@ class RunHttpRouteSurface:
         provider_probe_rows: list[Mapping[str, Any]] | tuple[Mapping[str, Any], ...] = (),
         provider_binding_rows: list[Mapping[str, Any]] | tuple[Mapping[str, Any], ...] = (),
         managed_secret_rows: list[Mapping[str, Any]] | tuple[Mapping[str, Any], ...] = (),
+        share_payload_rows: list[Mapping[str, Any]] | tuple[Mapping[str, Any], ...] = (),
     ) -> HttpRouteResponse:
         if http_request.method != "GET":
             return _route_response(405, {"error_family": "route_error", "reason_code": "route.method_not_allowed", "message": "Recent activity route only supports GET."})
@@ -6874,6 +6875,7 @@ class RunHttpRouteSurface:
             provider_probe_rows=provider_probe_rows,
             provider_binding_rows=provider_binding_rows,
             managed_secret_rows=managed_secret_rows,
+            share_payload_rows=share_payload_rows,
             workspace_id=workspace_id,
             limit=limit,
             cursor=cursor,
