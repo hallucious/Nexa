@@ -115,6 +115,7 @@ class ProductHistorySummaryResponse:
     terminal_success_runs: int = 0
     terminal_failure_runs: int = 0
     recent_workspace_count: int = 0
+    recent_share_history_count: int = 0
     recent_probe_count: int = 0
     failed_probe_count: int = 0
     recent_provider_binding_count: int = 0
@@ -122,6 +123,7 @@ class ProductHistorySummaryResponse:
     recent_onboarding_count: int = 0
     latest_activity_at: Optional[str] = None
     latest_workspace_id: Optional[str] = None
+    latest_share_id: Optional[str] = None
     latest_run_id: Optional[str] = None
     latest_probe_event_id: Optional[str] = None
     latest_provider_binding_id: Optional[str] = None
@@ -139,6 +141,7 @@ class ProductHistorySummaryResponse:
             'terminal_success_runs',
             'terminal_failure_runs',
             'recent_workspace_count',
+            'recent_share_history_count',
             'recent_probe_count',
             'failed_probe_count',
             'recent_provider_binding_count',

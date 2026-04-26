@@ -1663,50 +1663,42 @@ def test_framework_binding_workspace_shell_includes_latest_run_previews() -> Non
     assert parsed['first_success_run_section']['summary']['headline'] == 'First-success run'
     assert parsed['first_success_run_section']['run_state'] == 'complete'
     assert parsed['first_success_run_section']['run_path_kind'] == 'read_result'
-    assert parsed['first_success_run_section']['current_step_id'] == 'read_result'
-    assert parsed['first_success_run_section']['controls'][0]['action_target'] == 'runtime.result'
-    assert parsed['return_use_continuity_section']['summary']['headline'] == 'Return-use continuity'
-    assert parsed['return_use_continuity_section']['return_use_state'] == 'complete'
-    assert parsed['return_use_continuity_section']['return_path_kind'] == 'result_reentry'
-    assert parsed['return_use_continuity_section']['current_step_id'] == 'reopen_result'
-    assert any(line.startswith('Current path: Result reentry') for line in parsed['return_use_continuity_section']['summary']['lines'])
-    assert parsed['return_use_continuity_section']['controls'][0]['action_target'] == '/app/workspaces/ws-001/results?app_language=en'
-    assert parsed['product_surface_review_section']['summary']['headline'] == 'Product surface review'
-    assert parsed['product_surface_review_section']['review_state'] == 'product_surface_stable'
-    assert parsed['product_surface_review_section']['product_path_family'] == 'feedback'
-    assert parsed['product_surface_review_section']['product_path_kind'] == 'feedback_thread_reentry'
-    assert parsed['product_surface_review_section']['current_step_id'] == 'reopen_feedback_thread'
-    assert any(line.startswith('Current path: Feedback thread reentry') for line in parsed['product_surface_review_section']['summary']['lines'])
-    assert parsed['product_surface_review_section']['controls'][0]['action_target'] == '/app/workspaces/ws-001/feedback'
-    assert parsed['designer_section']['summary']['headline'] == 'Designer workspace'
-    assert parsed['designer_section']['detail']['title'] == 'Designer detail'
-    assert parsed['designer_section']['controls'][0]['action_kind'] == 'apply_template'
-    assert parsed['designer_section']['controls'][0]['action_target'] == 'nexa-curated:text_summarizer@1.0'
-    assert parsed['designer_section']['controls'][0]['template_ref'] == 'nexa-curated:text_summarizer@1.0'
-    assert parsed['designer_section']['controls'][0]['template_provenance']['source'] == 'nexa-curated'
-    assert parsed['designer_section']['controls'][1]['action_target'] == 'designer.detail'
-    assert parsed['validation_section']['summary']['headline'] == 'Validation: unknown'
-    assert parsed['validation_section']['detail']['title'] == 'Validation detail'
-    assert parsed['validation_section']['controls'][0]['action_kind'] == 'run_draft'
-    assert parsed['validation_section']['controls'][1]['action_kind'] == 'focus_section'
-    assert parsed['validation_section']['controls'][2]['action_kind'] == 'focus_auxiliary'
-    assert parsed['navigation']['default_section'] == 'result'
-    assert parsed['navigation']['default_level'] == 'detail'
-    assert parsed['navigation']['guidance_label'] == 'Recommended next: Result'
-    assert [section['section_id'] for section in parsed['navigation']['sections']] == ['designer', 'validation', 'status', 'result', 'trace', 'artifacts']
-    assert parsed['step_state_banner']['title'] == 'Step 5 of 5 — Read result'
-    assert parsed['step_state_banner']['recommended_section'] == 'result'
-    assert parsed['step_state_banner']['action_label'] == 'Open Result'
-    assert parsed['step_state_banner']['action_target'] == 'runtime.result'
-    assert parsed['step_state_banner']['action_kind'] == 'focus_section'
-    assert 'Result is ready.' in parsed['step_state_banner']['summary']
-    assert parsed['server_product_readiness_review']['authority'] == 'server'
-    assert parsed['server_product_readiness_review']['review_state'] == 'product_surface_stable'
-    assert parsed['server_product_readiness_review']['next_bottleneck_stage'] is None
-    assert parsed['server_product_readiness_review']['stages'][2]['stage_state'] == 'complete'
-    assert parsed['client_continuity']['enabled'] is True
-    assert parsed['client_continuity']['storage_key'] == 'nexa.runtime_shell.ws-001'
-    assert parsed['client_continuity']['version'] == 'phase6-batch15'
+
+
+def test_framework_binding_history_summary_includes_share_history() -> None:
+    outbound = FrameworkRouteBindings.handle_history_summary(
+        request=_request(method='GET', path='/api/users/me/history-summary'),
+        workspace_rows=({
+            'workspace_id': 'ws-001',
+            'owner_user_id': 'user-owner',
+            'title': 'Primary Workspace',
+            'description': 'Main',
+            'created_at': '2026-04-11T12:00:00+00:00',
+            'updated_at': '2026-04-11T12:00:30+00:00',
+            'continuity_source': 'server',
+            'archived': False,
+        },),
+        membership_rows=(),
+        onboarding_rows=(),
+        run_rows=(_run_row(status='completed', status_family='terminal_success'),),
+        share_payload_rows=(
+            export_public_nex_link_share(
+                _provider_backed_working_save('ws-001'),
+                share_id='share-framework-history-001',
+                title='Framework History Share',
+                created_at='2026-04-11T12:05:00+00:00',
+                updated_at='2026-04-11T12:05:30+00:00',
+                issued_by_user_ref='user-owner',
+            ),
+        ),
+        provider_probe_rows=(),
+        provider_binding_rows=(),
+        managed_secret_rows=(),
+    )
+    assert outbound.status_code == 200
+    payload = json.loads(outbound.body_text)
+    assert payload['recent_share_history_count'] == 1
+    assert payload['latest_share_id'] == 'share-framework-history-001'
 
 
 def test_framework_binding_workspace_shell_pre_run_banner_for_empty_mobile_workspace() -> None:

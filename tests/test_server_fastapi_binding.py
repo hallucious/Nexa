@@ -1650,6 +1650,16 @@ def test_fastapi_binding_managed_secret_round_trip_enables_health_and_probe_reso
             'last_rotated_at': str(metadata.get('now_iso') or '2026-04-11T12:11:00+00:00'),
         },
         provider_probe_runner=_probe_runner,
+        public_share_payload_rows_provider=lambda: (
+            export_public_nex_link_share(
+                _provider_backed_working_save_artifact(ref='ws-001'),
+                share_id='share-secret-roundtrip',
+                title='Shared Workspace',
+                created_at='2026-04-11T12:05:00+00:00',
+                updated_at='2026-04-11T12:05:30+00:00',
+                issued_by_user_ref='user-owner',
+            ),
+        ),
         binding_id_factory=lambda: 'binding-secret-roundtrip',
         probe_event_id_factory=lambda: 'probe-secret-roundtrip',
         now_iso_provider=lambda: '2026-04-11T12:11:00+00:00',
@@ -1693,8 +1703,10 @@ def test_fastapi_binding_managed_secret_round_trip_enables_health_and_probe_reso
     summary_payload = summary_response.json()
     assert summary_payload['provider_continuity']['provider_binding_count'] == 1
     assert summary_payload['activity_continuity']['recent_run_count'] == 0
+    assert summary_payload['recent_share_history_count'] == 1
     assert summary_payload['recent_provider_binding_count'] == 1
     assert summary_payload['recent_managed_secret_count'] == 1
+    assert summary_payload['latest_share_id'] == 'share-secret-roundtrip'
     assert summary_payload['latest_provider_binding_id'] == 'binding-secret-roundtrip'
     assert summary_payload['latest_managed_secret_ref'] == 'secret://ws-001/openai'
     assert summary_payload['latest_activity_at'] == '2026-04-11T12:11:00+00:00'

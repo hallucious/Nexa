@@ -19,6 +19,7 @@ from src.server.recent_activity_models import (
     ProductRecentActivityResponse,
     RecentActivityReadOutcome,
 )
+from src.storage.share_api import describe_public_nex_link_share
 
 
 def _visible_workspaces(
@@ -51,6 +52,38 @@ def _workspace_row_by_id(workspace_rows: Sequence[Mapping[str, Any]], workspace_
         if str(row.get('workspace_id') or '').strip() == normalized:
             return row
     return None
+
+
+def _visible_share_rows(
+    *,
+    request_auth: RequestAuthContext,
+    share_payload_rows: Sequence[Mapping[str, Any]],
+    workspace_id: str | None,
+) -> tuple[Mapping[str, Any], ...]:
+    requested_user_ref = str(request_auth.requested_by_user_ref or '').strip()
+    requested_workspace_id = str(workspace_id or '').strip() or None
+    visible: list[Mapping[str, Any]] = []
+    for row in share_payload_rows:
+        try:
+            descriptor = describe_public_nex_link_share(dict(row))
+        except Exception:
+            continue
+        issuer_user_ref = str(descriptor.issued_by_user_ref or '').strip()
+        source_workspace_id = str(descriptor.source_working_save_id or '').strip() or None
+        if requested_user_ref and issuer_user_ref != requested_user_ref:
+            continue
+        if requested_workspace_id is not None and source_workspace_id != requested_workspace_id:
+            continue
+        visible.append(dict(row))
+    return tuple(visible)
+
+
+def _share_row_sort_key(row: Mapping[str, Any]) -> tuple[str, str]:
+    try:
+        descriptor = describe_public_nex_link_share(dict(row))
+    except Exception:
+        return ('', '')
+    return (str(descriptor.updated_at or descriptor.created_at or '').strip(), str(descriptor.share_id or '').strip())
 
 
 def _response_continuity_projection(
@@ -430,6 +463,7 @@ class RecentActivityService:
         membership_rows: Sequence[Mapping[str, Any]] = (),
         onboarding_rows: Sequence[Mapping[str, Any]] = (),
         run_rows: Sequence[Mapping[str, Any]] = (),
+        share_payload_rows: Sequence[Mapping[str, Any]] = (),
         provider_probe_rows: Sequence[Mapping[str, Any]] = (),
         provider_binding_rows: Sequence[Mapping[str, Any]] = (),
         managed_secret_rows: Sequence[Mapping[str, Any]] = (),
@@ -468,6 +502,21 @@ class RecentActivityService:
             item for item in visible_workspaces
             if workspace_id is None or item.workspace_id == workspace_id
         ]
+        filtered_share_rows = list(
+            _visible_share_rows(
+                request_auth=request_auth,
+                share_payload_rows=share_payload_rows,
+                workspace_id=workspace_id,
+            )
+        )
+        filtered_share_rows.sort(key=_share_row_sort_key, reverse=True)
+        latest_share_at = _share_row_sort_key(filtered_share_rows[0])[0] if filtered_share_rows else None
+        latest_share_id = None
+        if filtered_share_rows:
+            try:
+                latest_share_id = describe_public_nex_link_share(dict(filtered_share_rows[0])).share_id
+            except Exception:
+                latest_share_id = None
         latest_workspace_at = None
         latest_workspace_id = None
         if filtered_workspaces:
@@ -542,6 +591,7 @@ class RecentActivityService:
         candidate_times = [value for value in (
             latest_activity_at,
             latest_workspace_at,
+            latest_share_at,
             latest_binding_at,
             latest_secret_at,
             latest_onboarding_at,
@@ -581,6 +631,7 @@ class RecentActivityService:
                 terminal_success_runs=terminal_success_runs,
                 terminal_failure_runs=terminal_failure_runs,
                 recent_workspace_count=len(filtered_workspaces),
+                recent_share_history_count=len(filtered_share_rows),
                 recent_probe_count=recent_probe_count,
                 failed_probe_count=failed_probe_count,
                 recent_provider_binding_count=recent_provider_binding_count,
@@ -588,6 +639,7 @@ class RecentActivityService:
                 recent_onboarding_count=recent_onboarding_count,
                 latest_activity_at=latest_activity_at,
                 latest_workspace_id=latest_workspace_id,
+                latest_share_id=latest_share_id,
                 latest_run_id=str(latest_run.get('run_id') or '').strip() or None if latest_run is not None else None,
                 latest_probe_event_id=latest_probe.probe_event_id if latest_probe is not None else None,
                 latest_provider_binding_id=latest_binding_id,

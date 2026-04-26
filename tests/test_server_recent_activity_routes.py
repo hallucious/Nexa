@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from src.server import HttpRouteRequest, RecentActivityService, RequestAuthResolver, RunHttpRouteSurface
+from src.storage.share_api import export_public_nex_link_share
 
 
 def _auth(user_id: str = 'user-owner'):
@@ -107,6 +108,28 @@ def _onboarding_row(onboarding_state_id: str, updated_at: str, *, user_id: str =
         'updated_at': updated_at,
     }
 
+
+def _working_save_artifact(workspace_id: str = 'ws-001') -> dict:
+    return {
+        'meta': {'format_version': '1.0.0', 'storage_role': 'working_save', 'working_save_id': workspace_id, 'name': 'Primary Workspace'},
+        'circuit': {'nodes': [], 'edges': [], 'entry': None, 'outputs': []},
+        'resources': {'prompts': {}, 'providers': {}, 'plugins': {}},
+        'state': {'input': {}, 'working': {}, 'memory': {}},
+        'runtime': {'status': 'draft', 'validation_summary': {}, 'last_run': {}, 'errors': []},
+        'ui': {'layout': {}, 'metadata': {}},
+    }
+
+
+def _share_payload(share_id: str = 'share-001', *, workspace_id: str = 'ws-001', issued_by_user_ref: str = 'user-collab', updated_at: str = '2026-04-11T12:10:30+00:00') -> dict:
+    return export_public_nex_link_share(
+        _working_save_artifact(workspace_id),
+        share_id=share_id,
+        title='Recent Activity Share',
+        created_at='2026-04-11T12:05:00+00:00',
+        updated_at=updated_at,
+        issued_by_user_ref=issued_by_user_ref,
+    )
+
 def _headers(user_id: str = 'user-owner') -> dict[str, str]:
     return {
         'Authorization': 'Bearer token',
@@ -180,6 +203,10 @@ def test_recent_activity_summary_filters_to_visible_workspace() -> None:
             _run_row('run-001', '2026-04-11T12:06:00+00:00', status='completed', status_family='terminal_success'),
             _run_row('run-002', '2026-04-11T12:07:00+00:00', status='failed', status_family='terminal_failure', workspace_id='ws-002'),
         ),
+        share_payload_rows=(
+            _share_payload('share-001', workspace_id='ws-001', issued_by_user_ref='user-collab'),
+            _share_payload('share-foreign', workspace_id='ws-002', issued_by_user_ref='user-other'),
+        ),
         provider_probe_rows=(
             _probe_row('probe-001', '2026-04-11T12:08:00+00:00'),
         ),
@@ -200,6 +227,8 @@ def test_recent_activity_summary_filters_to_visible_workspace() -> None:
     assert outcome.response.visible_workspace_count == 1
     assert outcome.response.recent_workspace_count == 1
     assert outcome.response.latest_workspace_id == 'ws-001'
+    assert outcome.response.recent_share_history_count == 1
+    assert outcome.response.latest_share_id == 'share-001'
     assert outcome.response.total_visible_runs == 1
     assert outcome.response.terminal_success_runs == 1
     assert outcome.response.terminal_failure_runs == 0
@@ -292,6 +321,9 @@ def test_recent_activity_route_family_round_trip() -> None:
             _run_row('run-001', '2026-04-11T12:06:00+00:00', status='completed', status_family='terminal_success'),
             _run_row('run-002', '2026-04-11T12:07:00+00:00', status='queued', status_family='pending'),
         ),
+        share_payload_rows=(
+            _share_payload('share-002', workspace_id='ws-001', issued_by_user_ref='user-collab'),
+        ),
         provider_probe_rows=(
             _probe_row('probe-001', '2026-04-11T12:08:00+00:00'),
         ),
@@ -310,6 +342,8 @@ def test_recent_activity_route_family_round_trip() -> None:
     assert summary_response.status_code == 200
     assert summary_response.body['recent_workspace_count'] == 1
     assert summary_response.body['latest_workspace_id'] == 'ws-001'
+    assert summary_response.body['recent_share_history_count'] == 1
+    assert summary_response.body['latest_share_id'] == 'share-002'
     assert summary_response.body['total_visible_runs'] == 2
     assert summary_response.body['pending_runs'] == 1
     assert summary_response.body['recent_probe_count'] == 1

@@ -145,6 +145,7 @@ class FastApiRouteBindings:
                 membership_rows=self.dependencies.workspace_membership_rows_provider(),
                 onboarding_rows=self.dependencies.onboarding_rows_provider(),
                 run_rows=self.dependencies.recent_run_rows_provider(),
+                share_payload_rows=self.dependencies.public_share_payload_rows_provider(),
                 provider_probe_rows=self.dependencies.recent_provider_probe_rows_provider(),
                 provider_binding_rows=self.dependencies.recent_provider_binding_rows_provider(),
                 managed_secret_rows=self.dependencies.recent_managed_secret_rows_provider(),
