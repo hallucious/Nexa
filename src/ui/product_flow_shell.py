@@ -123,6 +123,19 @@ def _fallback_panel_id(shell_vm: BuilderShellViewModel, *, preferred: tuple[str,
 
 
 def _sanitize_focus_for_beginner_policy(shell_vm: BuilderShellViewModel, focus: ProductFlowFocusView, *, app_language: str) -> ProductFlowFocusView:
+    # Preserve explicit user intent and approval-review focus. Beginner gating should
+    # block passive deep-surface leakage, not rewrite an already selected review,
+    # return-use, or safe core-workspace action into an unrelated panel.
+    if focus.focus_reason in {
+        "proposal_approval",
+        "explicit_return_use_surface",
+        "result_history_surface",
+    }:
+        return focus
+    if focus.focus_reason in {"handoff_primary", "handoff_followthrough"} and focus.active_bottom_panel_id == "diff":
+        return focus
+    if focus.focus_reason == "explicit_core_workspace_surface" and focus.active_workspace_id != "visual_editor":
+        return focus
     suppressed = _suppressed_panel_ids(shell_vm)
     if not suppressed:
         return focus
@@ -399,6 +412,16 @@ def _surface_targets(shell_vm: BuilderShellViewModel | None, *, app_language: st
     right_stack_ids = ["inspector", "designer", "validation", "execution", "trace_timeline", "artifact", "circuit_library", "result_history", "feedback_channel"]
     bottom_dock_ids = ["validation", "storage", "execution", "trace_timeline", "artifact", "diff", "result_history", "feedback_channel"]
     hidden_in_beginner = _suppressed_panel_ids(shell_vm)
+    focus_surface_target_exempt = (
+        focus.focus_reason in {"proposal_approval", "explicit_return_use_surface", "result_history_surface"}
+        or (focus.focus_reason in {"handoff_primary", "handoff_followthrough"} and focus.active_bottom_panel_id == "diff")
+        or (focus.focus_reason == "explicit_core_workspace_surface" and focus.active_workspace_id != "visual_editor")
+    )
+    focused_panel_ids = (
+        {panel_id for panel_id in {focus.active_right_panel_id, focus.active_bottom_panel_id} if panel_id in {"diff", "result_history", "trace_timeline", "artifact"}}
+        if focus_surface_target_exempt
+        else set()
+    )
 
     status_by_panel = {
         "inspector": "ready" if shell_vm.inspector is not None else "empty",
@@ -438,7 +461,7 @@ def _surface_targets(shell_vm: BuilderShellViewModel | None, *, app_language: st
             status=status_by_panel[panel_id],
         )
         for panel_id in right_stack_ids
-        if panel_id not in hidden_in_beginner and (status_by_panel[panel_id] != "empty" or panel_id in {"inspector", "designer", "validation"})
+        if (panel_id not in hidden_in_beginner or panel_id in focused_panel_ids) and (status_by_panel[panel_id] != "empty" or panel_id in {"inspector", "designer", "validation"})
     ]
     bottom_dock = [
         ProductFlowSurfaceTargetView(
@@ -451,7 +474,7 @@ def _surface_targets(shell_vm: BuilderShellViewModel | None, *, app_language: st
             status=status_by_panel[panel_id],
         )
         for panel_id in bottom_dock_ids
-        if panel_id not in hidden_in_beginner and (status_by_panel[panel_id] not in {"empty", "hidden"} or panel_id in {"validation", "storage"})
+        if (panel_id not in hidden_in_beginner or panel_id in focused_panel_ids) and (status_by_panel[panel_id] not in {"empty", "hidden"} or panel_id in {"validation", "storage"})
     ]
     return right_stack, bottom_dock
 

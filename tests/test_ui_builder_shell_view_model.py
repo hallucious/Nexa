@@ -605,3 +605,29 @@ def test_builder_shell_projects_product_readiness_stable_for_historical_result_s
     assert vm.product_readiness.next_bottleneck_stage is None
     assert vm.product_readiness.recommended_action_id is None
     assert vm.product_readiness.stages[2].stage_state == "complete"
+
+
+def test_builder_shell_does_not_unlock_deep_surfaces_from_completed_execution_alone() -> None:
+    source = WorkingSaveModel(
+        meta=WorkingSaveMeta(format_version="1.0.0", storage_role="working_save", working_save_id="ws-beginner-completed-run", name="Draft"),
+        circuit=CircuitModel(nodes=[{"id": "n1"}], edges=[], entry="n1", outputs=[]),
+        resources=ResourcesModel(prompts={}, providers={}, plugins={}),
+        state=StateModel(input={}, working={}, memory={}),
+        runtime=RuntimeModel(status="draft", validation_summary={}, last_run={}, errors=[]),
+        ui=UIModel(layout={}, metadata={
+            "active_panel": "artifact",
+            "visible_panels": ["graph", "inspector", "designer", "storage", "result_history", "diff", "trace_timeline", "artifact"],
+            "pinned_panels": ["storage", "trace_timeline", "designer"],
+            "panel_order": ["graph", "storage", "result_history", "artifact", "designer"],
+        }),
+    )
+
+    vm = read_builder_shell_view_model(source, execution_record=_run())
+
+    assert vm.diagnostics.advanced_surfaces_unlocked is False
+    assert vm.coordination.active_panel == "inspector"
+    assert "storage" not in vm.coordination.visible_panels
+    assert "result_history" not in vm.coordination.visible_panels
+    assert "diff" not in vm.coordination.visible_panels
+    assert "trace_timeline" not in vm.coordination.visible_panels
+    assert "artifact" not in vm.coordination.visible_panels

@@ -385,14 +385,12 @@ def _is_empty_working_save(source: WorkingSaveModel | None) -> bool:
 
 
 def _beginner_first_success_achieved(metadata: dict[str, Any], *, execution_vm: ExecutionPanelViewModel | None = None) -> bool:
-    if bool(metadata.get("beginner_first_success_achieved")):
-        return True
-    if execution_vm is not None and execution_vm.execution_status == "completed" and execution_vm.run_identity.run_id is not None:
-        return True
-    return False
+    return bool(metadata.get("beginner_first_success_achieved"))
 
 
 def _advanced_surfaces_unlocked(metadata: dict[str, Any], *, execution_vm: ExecutionPanelViewModel | None = None) -> bool:
+    if bool(metadata.get("advanced_surfaces_unlocked")):
+        return True
     if bool(metadata.get("advanced_mode_requested")):
         return True
     if str(metadata.get("user_mode") or "").lower() == "advanced":

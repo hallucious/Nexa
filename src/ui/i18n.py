@@ -2963,6 +2963,10 @@ def beginner_surface_active(*sources: Any) -> bool:
 def beginner_advanced_surfaces_unlocked(*sources: Any) -> bool:
     if not beginner_surface_active(*sources):
         return True
+    for source in sources:
+        metadata = _beginner_metadata_from_source(_unwrap_beginner_source(source))
+        if bool(metadata.get('advanced_surfaces_unlocked')):
+            return True
     return _beginner_first_success_achieved(*sources)
 
 

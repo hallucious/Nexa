@@ -249,3 +249,41 @@ def test_panel_coordination_locks_deep_panels_for_nonempty_beginner_workspace_be
     assert "storage" not in vm.pinned_panels
     assert "trace_timeline" not in vm.pinned_panels
     assert all(badge.panel_id not in {"storage", "result_history", "diff", "trace_timeline", "artifact"} for badge in vm.panel_badges)
+
+
+def test_panel_coordination_does_not_unlock_deep_panels_from_completed_execution_alone() -> None:
+    source = WorkingSaveModel(
+        meta=WorkingSaveMeta(format_version="1.0.0", storage_role="working_save", working_save_id="ws-beginner-completed-run", name="Draft"),
+        circuit=CircuitModel(nodes=[{"id": "n1"}], edges=[], entry="n1", outputs=[]),
+        resources=ResourcesModel(prompts={}, providers={}, plugins={}),
+        state=StateModel(input={}, working={}, memory={}),
+        runtime=RuntimeModel(status="draft", validation_summary={}, last_run={}, errors=[]),
+        ui=UIModel(layout={}, metadata={
+            "active_panel": "artifact",
+            "visible_panels": ["graph", "inspector", "designer", "storage", "result_history", "diff", "trace_timeline", "artifact"],
+            "pinned_panels": ["storage", "trace_timeline", "designer"],
+            "panel_order": ["graph", "storage", "result_history", "artifact", "designer"],
+        }),
+    )
+    completed_run = _run(status="completed")
+    graph = read_graph_view_model(source)
+    designer = read_designer_panel_view_model(source)
+    execution = read_execution_panel_view_model(source, execution_record=completed_run)
+    trace = read_trace_timeline_view_model(completed_run)
+    artifact = read_artifact_viewer_view_model(completed_run, selected_artifact_id="art-1")
+
+    vm = read_panel_coordination_state(
+        source,
+        graph_view=graph,
+        designer_view=designer,
+        execution_view=execution,
+        trace_view=trace,
+        artifact_view=artifact,
+    )
+
+    assert vm.active_panel == "inspector"
+    assert "storage" not in vm.visible_panels
+    assert "result_history" not in vm.visible_panels
+    assert "diff" not in vm.visible_panels
+    assert "trace_timeline" not in vm.visible_panels
+    assert "artifact" not in vm.visible_panels

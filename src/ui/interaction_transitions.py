@@ -58,9 +58,8 @@ def _current_workspace_id(
     if workflow_hub is not None and workflow_hub.shell is not None:
         if workflow_hub.shell.shell_mode == "runtime_monitoring":
             return "runtime_monitoring", workflow_hub.shell.coordination.active_panel
-        if workflow_hub.shell.shell_mode == "designer_review":
-            return "node_configuration", workflow_hub.shell.coordination.active_panel
-        active_panel = workflow_hub.shell.coordination.active_panel
+        active_workspace_id = workflow_hub.shell.active_workspace_id or "visual_editor"
+        return active_workspace_id, workflow_hub.shell.coordination.active_panel
     if active_panel in {"designer", "inspector", "validation"}:
         return "node_configuration", active_panel
     if active_panel in {"execution", "trace_timeline", "artifact"}:

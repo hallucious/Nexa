@@ -289,3 +289,25 @@ def test_product_flow_runbook_surfaces_watch_progress_for_running_execution() ->
 
     assert vm.current_entry_id == "watch_run_progress"
     assert vm.recommended_entry_id == "watch_run_progress"
+
+
+def test_product_flow_runbook_unlocks_deep_followthrough_after_explicit_first_success() -> None:
+    vm = read_product_flow_runbook_view_model(
+        _working_save(metadata={"beginner_first_success_achieved": True}),
+        validation_report=_validation_report(),
+        execution_record=_run("completed"),
+        session_state_card=_session_card(),
+        intent=_intent(),
+        patch_plan=_patch(),
+        precheck=_precheck(),
+        preview=_preview(),
+        approval_flow=_approval(),
+    )
+
+    entries = {entry.entry_id: entry for entry in vm.entries}
+    assert entries["inspect_trace"].enabled is True
+    assert entries["inspect_trace"].action_id == "open_trace"
+    assert entries["inspect_trace"].preferred_panel_id == "trace_timeline"
+    assert entries["inspect_artifacts"].enabled is True
+    assert entries["inspect_artifacts"].action_id == "open_artifacts"
+    assert entries["inspect_artifacts"].preferred_panel_id == "artifact"

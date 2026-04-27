@@ -24,14 +24,17 @@ def _empty_working_save() -> WorkingSaveModel:
     )
 
 
-def _working_save() -> WorkingSaveModel:
+def _working_save(metadata: dict[str, object] | None = None) -> WorkingSaveModel:
+    ui_metadata: dict[str, object] = {"app_language": "ko-KR"}
+    if metadata:
+        ui_metadata.update(metadata)
     return WorkingSaveModel(
         meta=WorkingSaveMeta(format_version="1.0.0", storage_role="working_save", working_save_id="ws-001", name="Journey Draft"),
         circuit=CircuitModel(nodes=[{"id": "n1", "label": "Draft Generator"}], edges=[], entry="n1", outputs=[]),
         resources=ResourcesModel(prompts={}, providers={}, plugins={}),
         state=StateModel(input={}, working={}, memory={}),
         runtime=RuntimeModel(status="draft", validation_summary={}, last_run={"run_id": "run-001"}, errors=[]),
-        ui=UIModel(layout={}, metadata={"app_language": "ko-KR"}),
+        ui=UIModel(layout={}, metadata=ui_metadata),
     )
 
 
@@ -236,3 +239,21 @@ def test_product_flow_journey_prefers_provider_setup_before_other_beginner_steps
     steps = {step.step_id: step for step in vm.steps}
     assert steps["connect_provider"].actionable is True
     assert steps["choose_template"].actionable is True
+
+
+def test_product_flow_journey_unlocks_deep_observe_panel_after_explicit_first_success() -> None:
+    vm = read_product_flow_journey_view_model(
+        _working_save(metadata={"beginner_first_success_achieved": True}),
+        validation_report=_validation_report(),
+        execution_record=_run("completed"),
+        session_state_card=_session_card(),
+        intent=_intent(),
+        patch_plan=_patch(),
+        precheck=_precheck(),
+        preview=_preview(),
+        approval_flow=_approval(),
+    )
+
+    observe_step = next(step for step in vm.steps if step.step_id == "observe_results")
+    assert observe_step.preferred_panel_id == "artifact"
+    assert observe_step.step_label not in {"Read result", "결과 읽기"}

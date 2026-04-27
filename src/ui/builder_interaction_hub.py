@@ -108,8 +108,6 @@ def read_builder_interaction_hub_view_model(
     active_workspace_id = transition.current_workspace_id
     if workflow_hub.shell is not None and workflow_hub.shell.shell_mode == "runtime_monitoring":
         active_workspace_id = "runtime_monitoring"
-    elif workflow_hub.shell is not None and workflow_hub.shell.shell_mode == "designer_review":
-        active_workspace_id = "node_configuration"
 
     pending_confirmation_count = sum(1 for route in command_routing.routes if route.enabled and route.requires_confirmation)
     if command_routing.routing_status == "empty":

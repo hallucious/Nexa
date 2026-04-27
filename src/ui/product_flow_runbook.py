@@ -14,6 +14,7 @@ from src.storage.models.execution_record_model import ExecutionRecordModel
 from src.storage.models.loaded_nex_artifact import LoadedNexArtifact
 from src.storage.models.working_save_model import WorkingSaveModel
 from src.ui.builder_workflow_hub import BuilderWorkflowHubViewModel, read_builder_workflow_hub_view_model
+from src.ui.beginner_surface_gate import beginner_deep_surface_gate_active
 from src.ui.i18n import beginner_surface_active, ui_language_from_sources, ui_text
 from src.ui.product_flow_journey import ProductFlowJourneyViewModel, ProductFlowJourneyStepView, read_product_flow_journey_view_model
 
@@ -151,10 +152,10 @@ def _diff_target_ref(workflow_hub: BuilderWorkflowHubViewModel | None) -> str | 
     return None
 
 
-def _recommended_followthrough_entry(*, workflow_hub: BuilderWorkflowHubViewModel | None, beginner_surface: bool = False, return_use_ready: bool = False) -> str:
+def _recommended_followthrough_entry(*, workflow_hub: BuilderWorkflowHubViewModel | None, beginner_deep_gate_active: bool = False, return_use_ready: bool = False) -> str:
     if return_use_ready:
         return "reopen_recent_results"
-    if beginner_surface:
+    if beginner_deep_gate_active:
         return "run_current"
     if _has_trace(workflow_hub):
         return "inspect_trace"
@@ -211,6 +212,7 @@ def read_product_flow_runbook_view_model(
     execution_launch = workflow_hub.execution_launch if workflow_hub is not None else None
     beginner_surface = beginner_surface_active(source_unwrapped, execution_record)
     return_use_ready = _return_use_ready(source_unwrapped)
+    beginner_deep_gate_active = beginner_surface and not return_use_ready
     workspace_anchor_id = _workspace_anchor_id(source_unwrapped)
     has_result_history = bool(source_role == "execution_record" or execution_record is not None or (workflow_hub is not None and workflow_hub.shell is not None and workflow_hub.shell.storage is not None and workflow_hub.shell.storage.execution_record_card is not None and workflow_hub.shell.storage.execution_record_card.run_id is not None))
     feedback_available = bool(workspace_anchor_id is not None or source_role == "execution_record")
@@ -384,9 +386,9 @@ def read_product_flow_runbook_view_model(
             entry_status_label=_status_label(inspect_trace_status, app_language=app_language),
             preferred_workspace_id="runtime_monitoring",
             preferred_panel_id="trace_timeline",
-            action_id=(None if beginner_surface and source_role == "working_save" else ("open_trace" if _has_trace(workflow_hub) else replay_action.action_id if replay_action is not None and replay_action.enabled and not _has_trace(workflow_hub) else None)),
+            action_id=(None if beginner_deep_gate_active else ("open_trace" if _has_trace(workflow_hub) else replay_action.action_id if replay_action is not None and replay_action.enabled and not _has_trace(workflow_hub) else None)),
             target_ref=_trace_target_ref(workflow_hub),
-            enabled=bool(False if beginner_surface and source_role == "working_save" else (_has_trace(workflow_hub) or (replay_action is not None and replay_action.enabled))),
+            enabled=bool(False if beginner_deep_gate_active else (_has_trace(workflow_hub) or (replay_action is not None and replay_action.enabled))),
             complete=inspect_trace_status == "complete",
             reason_disabled=(observe_step.blocking_reason if not _has_trace(workflow_hub) and not (replay_action is not None and replay_action.enabled) and observe_step is not None else None),
         ),
@@ -397,9 +399,9 @@ def read_product_flow_runbook_view_model(
             entry_status_label=_status_label(inspect_artifact_status, app_language=app_language),
             preferred_workspace_id="runtime_monitoring",
             preferred_panel_id="artifact",
-            action_id=(None if beginner_surface and source_role == "working_save" else ("open_artifacts" if _has_artifacts(workflow_hub) else replay_action.action_id if replay_action is not None and replay_action.enabled and not _has_artifacts(workflow_hub) else None)),
+            action_id=(None if beginner_deep_gate_active else ("open_artifacts" if _has_artifacts(workflow_hub) else replay_action.action_id if replay_action is not None and replay_action.enabled and not _has_artifacts(workflow_hub) else None)),
             target_ref=_artifact_target_ref(workflow_hub),
-            enabled=False if beginner_surface and source_role == "working_save" else _has_artifacts(workflow_hub),
+            enabled=False if beginner_deep_gate_active else _has_artifacts(workflow_hub),
             complete=inspect_artifact_status == "complete",
             reason_disabled=(observe_step.blocking_reason if not _has_artifacts(workflow_hub) and observe_step is not None else None),
         ),
@@ -410,9 +412,9 @@ def read_product_flow_runbook_view_model(
             entry_status_label=_status_label(compare_results_status, app_language=app_language),
             preferred_workspace_id="runtime_monitoring" if _has_diff(workflow_hub) else "visual_editor",
             preferred_panel_id="diff",
-            action_id=(None if beginner_surface and source_role == "working_save" else ((compare_action.action_id if compare_action is not None and compare_action.enabled and compare_action.action_id == "compare_runs" else None) or ("open_diff" if _has_diff(workflow_hub) else None))),
+            action_id=(None if beginner_deep_gate_active else ((compare_action.action_id if compare_action is not None and compare_action.enabled and compare_action.action_id == "compare_runs" else None) or ("open_diff" if _has_diff(workflow_hub) else None))),
             target_ref=_diff_target_ref(workflow_hub),
-            enabled=bool(False if beginner_surface and source_role == "working_save" else (_has_diff(workflow_hub) or (compare_action is not None and compare_action.enabled and compare_action.action_id == "compare_runs"))),
+            enabled=bool(False if beginner_deep_gate_active else (_has_diff(workflow_hub) or (compare_action is not None and compare_action.enabled and compare_action.action_id == "compare_runs"))),
             complete=compare_results_status == "complete",
             reason_disabled=(compare_action.reason_disabled if compare_action is not None and not compare_action.enabled and not _has_diff(workflow_hub) else observe_step.blocking_reason if observe_step is not None and not _has_diff(workflow_hub) else None),
         ),
@@ -467,7 +469,7 @@ def read_product_flow_runbook_view_model(
             "approval": "approval_decision",
             "commit_snapshot": "commit_snapshot",
             "run_current": ("watch_run_progress" if watch_progress_enabled else "run_current"),
-            "observe_results": _recommended_followthrough_entry(workflow_hub=workflow_hub, beginner_surface=beginner_surface and source_role == "working_save", return_use_ready=return_use_ready),
+            "observe_results": _recommended_followthrough_entry(workflow_hub=workflow_hub, beginner_deep_gate_active=beginner_deep_gate_active, return_use_ready=return_use_ready),
         }
         current_entry_id = mapping.get(journey.current_step_id, "review_proposal")
 

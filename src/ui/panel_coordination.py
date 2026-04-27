@@ -96,14 +96,12 @@ def _is_empty_working_save(source: WorkingSaveModel | None, *, graph_view: Graph
 
 
 def _beginner_first_success_achieved(metadata: dict[str, Any], *, execution_view: ExecutionPanelViewModel | None = None) -> bool:
-    if bool(metadata.get("beginner_first_success_achieved")):
-        return True
-    if execution_view is not None and execution_view.execution_status == "completed" and execution_view.run_identity.run_id is not None:
-        return True
-    return False
+    return bool(metadata.get("beginner_first_success_achieved"))
 
 
 def _advanced_surfaces_unlocked(metadata: dict[str, Any], *, execution_view: ExecutionPanelViewModel | None = None) -> bool:
+    if bool(metadata.get("advanced_surfaces_unlocked")):
+        return True
     if bool(metadata.get("advanced_mode_requested")):
         return True
     if str(metadata.get("user_mode") or "").lower() == "advanced":
@@ -129,6 +127,42 @@ def _beginner_shell_active(
     execution_view: ExecutionPanelViewModel | None = None,
 ) -> bool:
     return _beginner_gate_active(source, execution_view=execution_view) and _is_empty_working_save(source, graph_view=graph_view)
+
+
+def _has_completed_local_result(source: WorkingSaveModel | CommitSnapshotModel | ExecutionRecordModel | None) -> bool:
+    if isinstance(source, ExecutionRecordModel):
+        return source.meta.status == "completed"
+    if isinstance(source, WorkingSaveModel):
+        last_run = getattr(source.runtime, "last_run", None) or {}
+        status = str(last_run.get("status") or last_run.get("semantic_status") or "").lower()
+        return bool(last_run.get("run_id") and status == "completed")
+    return False
+
+
+def _explicit_deep_panel_request_allowed(
+    panel_id: str,
+    *,
+    selection: SelectionSummaryView,
+    source: WorkingSaveModel | CommitSnapshotModel | ExecutionRecordModel | None,
+    result_history_view: ResultHistoryViewModel | None = None,
+    execution_view: ExecutionPanelViewModel | None = None,
+) -> bool:
+    has_completed_execution_view = bool(
+        execution_view is not None
+        and execution_view.execution_status == "completed"
+        and execution_view.run_identity.run_id is not None
+    )
+    if panel_id == "artifact" and selection.selected_artifact_ids and has_completed_execution_view:
+        return True
+    if panel_id == "trace_timeline" and selection.selected_trace_event_ids and has_completed_execution_view:
+        return True
+    if panel_id == "diff" and selection.selected_diff_change_id is not None:
+        return True
+    if panel_id == "storage" and selection.selected_storage_ref is not None:
+        return True
+    if panel_id == "result_history":
+        return _has_completed_local_result(source)
+    return False
 
 
 def _default_visible_panels(
@@ -282,18 +316,52 @@ def read_panel_coordination_state(
     beginner_shell_active = _beginner_shell_active(source, graph_view=graph_view, execution_view=execution_view)
     advanced_unlocked = _advanced_surfaces_unlocked(metadata, execution_view=execution_view)
     allowed_beginner_panels = set(_EMPTY_BEGINNER_PANELS if beginner_shell_active else _CORE_BEGINNER_PANELS)
+    panel_order = [str(v) for v in metadata.get("panel_order", visible_panels) if v is not None]
+
+    active_panel = str(metadata.get("active_panel")) if metadata.get("active_panel") else ""
+    explicit_deep_panel_allowed = _explicit_deep_panel_request_allowed(
+        active_panel,
+        selection=selection,
+        source=source,
+        result_history_view=result_history_view,
+        execution_view=execution_view,
+    )
     if beginner_gate_active and not advanced_unlocked:
         visible_panels = [
             panel_id
             for panel_id in visible_panels
-            if panel_id in allowed_beginner_panels and panel_id not in _ADVANCED_ONLY_PANELS
+            if (
+                panel_id in allowed_beginner_panels
+                or (
+                    panel_id == active_panel
+                    and _explicit_deep_panel_request_allowed(
+                        panel_id,
+                        selection=selection,
+                        source=source,
+                        result_history_view=result_history_view,
+                        execution_view=execution_view,
+                    )
+                )
+            )
+            and panel_id not in (_ADVANCED_ONLY_PANELS - {active_panel if explicit_deep_panel_allowed else ""})
         ]
-    panel_order = [str(v) for v in metadata.get("panel_order", visible_panels) if v is not None]
-    if beginner_gate_active and not advanced_unlocked:
         panel_order = [
             panel_id
             for panel_id in panel_order
-            if panel_id in allowed_beginner_panels and panel_id not in _ADVANCED_ONLY_PANELS
+            if (
+                panel_id in allowed_beginner_panels
+                or (
+                    panel_id == active_panel
+                    and _explicit_deep_panel_request_allowed(
+                        panel_id,
+                        selection=selection,
+                        source=source,
+                        result_history_view=result_history_view,
+                        execution_view=execution_view,
+                    )
+                )
+            )
+            and panel_id not in (_ADVANCED_ONLY_PANELS - {active_panel if explicit_deep_panel_allowed else ""})
         ]
         pinned_panels = [
             panel_id
@@ -301,17 +369,42 @@ def read_panel_coordination_state(
             if panel_id in allowed_beginner_panels and panel_id not in _ADVANCED_ONLY_PANELS
         ]
 
-    active_panel = str(metadata.get("active_panel")) if metadata.get("active_panel") else ""
-    if beginner_gate_active and not advanced_unlocked and (active_panel in _ADVANCED_ONLY_PANELS or active_panel not in allowed_beginner_panels):
+    if beginner_gate_active and not advanced_unlocked and (
+        active_panel in _ADVANCED_ONLY_PANELS or active_panel not in allowed_beginner_panels
+    ) and not explicit_deep_panel_allowed:
         active_panel = ""
     if not active_panel:
-        if not beginner_gate_active and selection.selected_artifact_ids:
+        if _explicit_deep_panel_request_allowed(
+            "artifact",
+            selection=selection,
+            source=source,
+            result_history_view=result_history_view,
+            execution_view=execution_view,
+        ):
             active_panel = "artifact"
-        elif not beginner_gate_active and selection.selected_trace_event_ids:
+        elif _explicit_deep_panel_request_allowed(
+            "trace_timeline",
+            selection=selection,
+            source=source,
+            result_history_view=result_history_view,
+            execution_view=execution_view,
+        ):
             active_panel = "trace_timeline"
-        elif not beginner_gate_active and selection.selected_diff_change_id is not None:
+        elif _explicit_deep_panel_request_allowed(
+            "diff",
+            selection=selection,
+            source=source,
+            result_history_view=result_history_view,
+            execution_view=execution_view,
+        ):
             active_panel = "diff"
-        elif not beginner_gate_active and selection.selected_storage_ref is not None:
+        elif _explicit_deep_panel_request_allowed(
+            "storage",
+            selection=selection,
+            source=source,
+            result_history_view=result_history_view,
+            execution_view=execution_view,
+        ):
             active_panel = "storage"
         elif beginner_shell_active and designer_view is not None:
             active_panel = "designer"
@@ -325,7 +418,7 @@ def read_panel_coordination_state(
             active_panel = "storage"
         elif designer_view is not None and designer_view.request_state.request_status in {"submitted", "editing"}:
             active_panel = "designer"
-        elif selection.primary_ref is not None and role in {"working_save", "commit_snapshot"}:
+        elif role in {"working_save", "commit_snapshot"}:
             active_panel = "inspector"
         else:
             active_panel = "graph"
@@ -388,7 +481,18 @@ def read_panel_coordination_state(
         active_panel in supplemental_panels
         and supplemental_panels[active_panel]
         and active_panel not in visible_panels
-        and not (beginner_gate_active and not advanced_unlocked and active_panel not in allowed_beginner_panels)
+        and not (
+            beginner_gate_active
+            and not advanced_unlocked
+            and active_panel not in allowed_beginner_panels
+            and not _explicit_deep_panel_request_allowed(
+                active_panel,
+                selection=selection,
+                source=source,
+                result_history_view=result_history_view,
+                execution_view=execution_view,
+            )
+        )
     ):
         visible_panels.append(active_panel)
         if active_panel not in panel_order:
