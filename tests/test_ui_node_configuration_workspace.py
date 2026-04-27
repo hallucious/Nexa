@@ -23,6 +23,12 @@ def _working_save() -> WorkingSaveModel:
     )
 
 
+def _working_save_after_first_success() -> WorkingSaveModel:
+    working = _working_save()
+    working.ui.metadata["beginner_first_success_achieved"] = True
+    return working
+
+
 def _validation() -> ValidationReport:
     return ValidationReport(
         role="working_save",
@@ -236,7 +242,7 @@ def test_node_configuration_workspace_exposes_suggested_actions_for_awaiting_sel
 
 
 def test_node_configuration_workspace_prioritizes_blocked_repair_flow() -> None:
-    vm = read_node_configuration_workspace_view_model(_working_save(), validation_report=_blocked_validation())
+    vm = read_node_configuration_workspace_view_model(_working_save_after_first_success(), validation_report=_blocked_validation())
 
     assert vm.workspace_status == "blocked"
     assert vm.readiness.posture == "repair_selection"
@@ -320,3 +326,12 @@ def test_node_configuration_workspace_exposes_closure_layers_for_configuring_sta
     assert vm.closure_verdict.closure_state == "ready_to_move_on"
     assert vm.closure_verdict.should_move_on is True
     assert vm.closure_verdict.move_on_target_workspace == "runtime_monitoring"
+
+
+def test_node_configuration_workspace_blocks_deep_shortcuts_before_first_success() -> None:
+    vm = read_node_configuration_workspace_view_model(_working_save(), validation_report=_blocked_validation())
+
+    actions = {action.action_id: action for action in vm.local_actions}
+    assert actions["open_diff"].enabled is False
+    assert "open_diff" not in [shortcut.action.action_id for shortcut in vm.action_shortcuts]
+    assert all(stage.action_id != "open_diff" for stage in vm.progress_stages)

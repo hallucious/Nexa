@@ -17,6 +17,7 @@ from src.ui.action_schema import BuilderActionSchemaView, BuilderActionView, rea
 from src.ui.designer_panel import DesignerPanelViewModel, read_designer_panel_view_model
 from src.ui.graph_workspace import GraphPreviewOverlay
 from src.ui.i18n import ui_language_from_sources, ui_text
+from src.ui.beginner_surface_gate import gate_beginner_actions, action_blocked_by_beginner_gate
 from src.ui.inspector_panel import SelectedObjectViewModel, read_selected_object_view_model
 from src.ui.panel_coordination import BuilderPanelCoordinationStateView, read_panel_coordination_state
 from src.ui.validation_panel import ValidationPanelViewModel, read_validation_panel_view_model
@@ -537,8 +538,8 @@ def _configuration_handoff(
         return ConfigurationWorkspaceHandoffView(
             destination_workspace="visual_editor",
             destination_panel="graph",
-            action_id=action.action_id if action is not None else None,
-            action_label=_action_label(action, app_language=app_language),
+            action_id=action.action_id if action is not None and not action_blocked_by_beginner_gate(action) else None,
+            action_label=_action_label(action if action is not None and not action_blocked_by_beginner_gate(action) else None, app_language=app_language),
             reason=ui_text(
                 "workspace.configuration.handoff.awaiting_selection",
                 app_language=app_language,
@@ -552,8 +553,8 @@ def _configuration_handoff(
             destination_workspace="node_configuration",
             destination_panel="validation",
             target_ref=selection_summary.selected_ref,
-            action_id=action.action_id if action is not None else None,
-            action_label=_action_label(action, app_language=app_language),
+            action_id=action.action_id if action is not None and not action_blocked_by_beginner_gate(action) else None,
+            action_label=_action_label(action if action is not None and not action_blocked_by_beginner_gate(action) else None, app_language=app_language),
             reason=ui_text(
                 "workspace.configuration.handoff.blocked",
                 app_language=app_language,
@@ -567,8 +568,8 @@ def _configuration_handoff(
             destination_workspace="node_configuration",
             destination_panel="designer",
             target_ref=selection_summary.selected_ref,
-            action_id=action.action_id if action is not None else None,
-            action_label=_action_label(action, app_language=app_language),
+            action_id=action.action_id if action is not None and not action_blocked_by_beginner_gate(action) else None,
+            action_label=_action_label(action if action is not None and not action_blocked_by_beginner_gate(action) else None, app_language=app_language),
             reason=ui_text(
                 "workspace.configuration.handoff.designer_review",
                 app_language=app_language,
@@ -582,8 +583,8 @@ def _configuration_handoff(
             destination_workspace="runtime_monitoring",
             destination_panel="execution",
             target_ref=selection_summary.selected_ref,
-            action_id=action.action_id if action is not None else None,
-            action_label=_action_label(action, app_language=app_language),
+            action_id=action.action_id if action is not None and not action_blocked_by_beginner_gate(action) else None,
+            action_label=_action_label(action if action is not None and not action_blocked_by_beginner_gate(action) else None, app_language=app_language),
             reason=ui_text(
                 "workspace.configuration.handoff.run_review",
                 app_language=app_language,
@@ -670,7 +671,7 @@ def _configuration_action_shortcuts(
     shortcuts: list[ConfigurationActionShortcutView] = []
     for action_id, priority, emphasis in priority_specs:
         action = action_map.get(action_id)
-        if action is None:
+        if action is None or action_blocked_by_beginner_gate(action):
             continue
         shortcuts.append(
             ConfigurationActionShortcutView(
@@ -711,8 +712,8 @@ def _configuration_attention_targets(
             summary=ui_text(summary_key, app_language=app_language, fallback_text=fallback_summary, **params),
             destination_workspace=workspace_handoff.destination_workspace,
             destination_panel=workspace_handoff.destination_panel,
-            action_id=action_id,
-            action_label=_action_label(action, app_language=app_language),
+            action_id=action.action_id if action is not None and not action_blocked_by_beginner_gate(action) else None,
+            action_label=_action_label(action if action is not None and not action_blocked_by_beginner_gate(action) else None, app_language=app_language),
             blocking=blocking,
         )
 
@@ -745,8 +746,8 @@ def _configuration_progress_stages(
             label=ui_text(f"workspace.configuration.progress.stage.{stage_id}", app_language=app_language, fallback_text=stage_id.replace("_", " ")),
             state=state,
             state_label=ui_text(f"workspace.configuration.progress.state.{state}", app_language=app_language, fallback_text=state.replace("_", " ")),
-            action_id=action_id,
-            action_label=_action_label(action, app_language=app_language),
+            action_id=action.action_id if action is not None and not action_blocked_by_beginner_gate(action) else None,
+            action_label=_action_label(action if action is not None and not action_blocked_by_beginner_gate(action) else None, app_language=app_language),
             target_ref=selection_summary.selected_ref,
             explanation=ui_text(explanation_key, app_language=app_language, fallback_text=fallback_explanation),
         )
@@ -810,8 +811,8 @@ def _configuration_closure_barriers(
             target_ref=selection_summary.selected_ref,
             title=ui_text(title_key, app_language=app_language, fallback_text=fallback_title, **params),
             summary=ui_text(summary_key, app_language=app_language, fallback_text=fallback_summary, **params),
-            action_id=action_id,
-            action_label=_action_label(action, app_language=app_language),
+            action_id=action.action_id if action is not None and not action_blocked_by_beginner_gate(action) else None,
+            action_label=_action_label(action if action is not None and not action_blocked_by_beginner_gate(action) else None, app_language=app_language),
             destination_workspace=destination_workspace,
             destination_panel=destination_panel,
             blocking=blocking,
@@ -964,6 +965,7 @@ def read_node_configuration_workspace_view_model(
         selection_summary=selection_summary,
         review_state=review_state,
     )
+    local_actions = gate_beginner_actions(local_actions, source_unwrapped)
     readiness = _configuration_readiness(
         workspace_status=workspace_status,
         selection_summary=selection_summary,

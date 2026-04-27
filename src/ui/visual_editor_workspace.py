@@ -12,6 +12,7 @@ from src.ui.designer_panel import read_designer_panel_view_model
 from src.ui.diff_viewer import DiffViewerViewModel, read_diff_view_model
 from src.ui.execution_panel import read_execution_panel_view_model
 from src.ui.i18n import ui_language_from_sources, ui_text
+from src.ui.beginner_surface_gate import gate_beginner_actions, action_blocked_by_beginner_gate
 from src.ui.graph_workspace import GraphPreviewOverlay, GraphWorkspaceViewModel, read_graph_view_model
 from src.ui.panel_coordination import BuilderPanelCoordinationStateView, read_panel_coordination_state
 from src.ui.storage_panel import StoragePanelViewModel, read_storage_view_model
@@ -760,7 +761,7 @@ def _editor_action_shortcuts(
     out: list[EditorActionShortcutView] = []
     for action_id, priority, emphasis in configs:
         action = action_map.get(action_id)
-        if action is None:
+        if action is None or action_blocked_by_beginner_gate(action):
             continue
         out.append(
             EditorActionShortcutView(
@@ -789,12 +790,17 @@ def _editor_workspace_handoff(
 
     def handoff(action_id: str | None, *, destination_workspace: str, destination_panel: str | None, reason_key: str, fallback_reason: str) -> EditorWorkspaceHandoffView:
         action = action_map.get(action_id) if action_id is not None else None
+        effective_destination_workspace = destination_workspace
+        effective_destination_panel = destination_panel
+        if action_id is not None and (action is None or action_blocked_by_beginner_gate(action)) and destination_panel == "diff":
+            effective_destination_workspace = "node_configuration"
+            effective_destination_panel = "inspector"
         return EditorWorkspaceHandoffView(
-            destination_workspace=destination_workspace,
-            destination_panel=destination_panel,
+            destination_workspace=effective_destination_workspace,
+            destination_panel=effective_destination_panel,
             target_ref=selection_summary.target_ref,
-            action_id=action_id,
-            action_label=_action_label(action, app_language=app_language),
+            action_id=action.action_id if action is not None and not action_blocked_by_beginner_gate(action) else None,
+            action_label=_action_label(action if action is not None and not action_blocked_by_beginner_gate(action) else None, app_language=app_language),
             reason=ui_text(reason_key, app_language=app_language, fallback_text=fallback_reason),
         )
 
@@ -884,8 +890,8 @@ def _editor_attention_targets(
             summary=ui_text(summary_key, app_language=app_language, fallback_text=fallback_summary, **params),
             destination_workspace=workspace_handoff.destination_workspace,
             destination_panel=workspace_handoff.destination_panel,
-            action_id=action_id,
-            action_label=_action_label(action, app_language=app_language),
+            action_id=action.action_id if action is not None and not action_blocked_by_beginner_gate(action) else None,
+            action_label=_action_label(action if action is not None and not action_blocked_by_beginner_gate(action) else None, app_language=app_language),
             blocking=blocking,
         )
 
@@ -992,8 +998,8 @@ def _editor_progress_stages(
                 app_language=app_language,
                 fallback_text=state.replace("_", " ").title(),
             ),
-            action_id=action_id,
-            action_label=_action_label(action, app_language=app_language),
+            action_id=action.action_id if action is not None and not action_blocked_by_beginner_gate(action) else None,
+            action_label=_action_label(action if action is not None and not action_blocked_by_beginner_gate(action) else None, app_language=app_language),
             target_ref=target_ref,
             explanation=ui_text(explanation_key, app_language=app_language, fallback_text=fallback_explanation),
         )
@@ -1081,16 +1087,21 @@ def _editor_closure_barriers(
         **params,
     ) -> EditorClosureBarrierView:
         action = action_map.get(action_id) if action_id is not None else None
+        effective_destination_workspace = destination_workspace
+        effective_destination_panel = destination_panel
+        if action_id is not None and (action is None or action_blocked_by_beginner_gate(action)) and destination_panel == "diff":
+            effective_destination_workspace = "node_configuration"
+            effective_destination_panel = "inspector"
         return EditorClosureBarrierView(
             barrier_kind=barrier_kind,
             severity=severity,
             target_ref=selection_summary.target_ref,
             title=ui_text(title_key, app_language=app_language, fallback_text=fallback_title, **params),
             summary=ui_text(summary_key, app_language=app_language, fallback_text=fallback_summary, **params),
-            action_id=action_id,
-            action_label=_action_label(action, app_language=app_language),
-            destination_workspace=destination_workspace,
-            destination_panel=destination_panel,
+            action_id=action.action_id if action is not None and not action_blocked_by_beginner_gate(action) else None,
+            action_label=_action_label(action if action is not None and not action_blocked_by_beginner_gate(action) else None, app_language=app_language),
+            destination_workspace=effective_destination_workspace,
+            destination_panel=effective_destination_panel,
             blocking=blocking,
         )
 
@@ -1385,6 +1396,7 @@ def read_visual_editor_workspace_view_model(
         can_run=can_run,
         review_ready=review_ready,
     )
+    local_actions = gate_beginner_actions(local_actions, source_unwrapped)
     suggested_actions = _workspace_suggested_actions(
         workspace_status=workspace_status,
         local_actions=local_actions,

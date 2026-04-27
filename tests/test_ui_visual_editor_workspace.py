@@ -22,6 +22,12 @@ def _working_save() -> WorkingSaveModel:
     )
 
 
+def _working_save_after_first_success() -> WorkingSaveModel:
+    working = _working_save()
+    working.ui.metadata["beginner_first_success_achieved"] = True
+    return working
+
+
 
 
 def _commit() -> CommitSnapshotModel:
@@ -285,7 +291,7 @@ def test_visual_editor_workspace_preview_shortcuts_prioritize_review_and_commit(
         removed_edge_ids=[],
     )
 
-    vm = read_visual_editor_workspace_view_model(_working_save(), validation_report=_validation(), preview_overlay=overlay)
+    vm = read_visual_editor_workspace_view_model(_working_save_after_first_success(), validation_report=_validation(), preview_overlay=overlay)
 
     assert [shortcut.action.action_id for shortcut in vm.action_shortcuts] == [
         "review_draft",
@@ -348,7 +354,7 @@ def test_visual_editor_workspace_handoff_routes_previewing_to_diff_inside_editor
         removed_edge_ids=[],
     )
 
-    vm = read_visual_editor_workspace_view_model(_working_save(), validation_report=_validation(), preview_overlay=overlay)
+    vm = read_visual_editor_workspace_view_model(_working_save_after_first_success(), validation_report=_validation(), preview_overlay=overlay)
 
     assert vm.workspace_handoff.destination_workspace == "visual_editor"
     assert vm.workspace_handoff.destination_panel == "diff"
@@ -385,7 +391,7 @@ def test_visual_editor_workspace_attention_targets_review_preview_changes() -> N
         removed_edge_ids=[],
     )
 
-    vm = read_visual_editor_workspace_view_model(_working_save(), validation_report=_validation(), preview_overlay=overlay)
+    vm = read_visual_editor_workspace_view_model(_working_save_after_first_success(), validation_report=_validation(), preview_overlay=overlay)
 
     assert vm.attention_targets[0].attention_kind == "preview_review"
     assert vm.attention_targets[0].urgency == "medium"
@@ -451,7 +457,7 @@ def test_visual_editor_workspace_progress_stages_and_barrier_prioritize_preview_
         removed_edge_ids=[],
     )
 
-    vm = read_visual_editor_workspace_view_model(_working_save(), validation_report=_validation(), preview_overlay=overlay)
+    vm = read_visual_editor_workspace_view_model(_working_save_after_first_success(), validation_report=_validation(), preview_overlay=overlay)
 
     assert [stage.state for stage in vm.progress_stages] == ["ready", "current", "blocked"]
     assert vm.progress_stages[1].action_id == "open_diff"
@@ -530,3 +536,24 @@ def test_visual_editor_workspace_closure_verdict_holds_reviewing_state_until_run
     assert vm.closure_verdict.should_move_on is False
     assert vm.closure_verdict.move_on_target_workspace is None
     assert vm.closure_verdict.dominant_barrier_kind == "runtime_focus"
+
+
+def test_visual_editor_workspace_blocks_diff_shortcuts_before_first_success() -> None:
+    overlay = GraphPreviewOverlay(
+        overlay_id="preview-beginner-lock",
+        summary="preview changes",
+        added_node_ids=["n3"],
+        updated_node_ids=["n2"],
+        removed_edge_ids=[],
+    )
+
+    vm = read_visual_editor_workspace_view_model(_working_save(), validation_report=_validation(), preview_overlay=overlay)
+
+    actions = {action.action_id: action for action in vm.local_actions}
+    assert actions["open_diff"].enabled is False
+    assert "open_diff" not in [shortcut.action.action_id for shortcut in vm.action_shortcuts]
+    assert vm.workspace_handoff.destination_panel != "diff"
+    assert vm.attention_targets[0].destination_panel != "diff"
+    assert vm.progress_stages[1].action_id is None
+    assert vm.closure_barriers[0].action_id is None
+    assert vm.closure_barriers[0].destination_panel != "diff"

@@ -205,3 +205,21 @@ def test_runtime_monitoring_workspace_failed_review_holds_workspace_chain() -> N
     assert vm.readiness.posture == "failure_investigation"
     assert vm.attention_targets[0].attention_kind == "failure_review"
     assert vm.closure_verdict.closure_state == "hold_runtime_monitoring"
+
+
+def test_runtime_monitoring_workspace_disables_locked_deep_actions_before_first_success() -> None:
+    vm = read_runtime_monitoring_workspace_view_model(
+        _working_save(),
+        execution_record=_run_completed(),
+        selected_artifact_id="art-1",
+    )
+
+    actions = {action.action_id: action for action in vm.local_actions}
+    assert actions["open_result_history"].enabled is False
+    assert actions["replay_latest"].enabled is False
+    assert actions["open_artifacts"].enabled is False
+    assert "open_result_history" not in [shortcut.action.action_id for shortcut in vm.action_shortcuts]
+    assert vm.workspace_handoff.destination_panel == "execution"
+    assert all(target.destination_panel not in {"result_history", "artifact", "trace_timeline"} for target in vm.attention_targets)
+    assert all(stage.action_id not in {"open_result_history", "replay_latest", "open_artifacts", "open_trace"} for stage in vm.progress_stages)
+    assert all(barrier.destination_panel not in {"result_history", "artifact", "trace_timeline"} for barrier in vm.closure_barriers)

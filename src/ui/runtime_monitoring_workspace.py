@@ -10,6 +10,7 @@ from src.storage.models.working_save_model import WorkingSaveModel
 from src.ui.action_schema import BuilderActionSchemaView, BuilderActionView, read_builder_action_schema
 from src.ui.artifact_viewer import ArtifactViewerViewModel, read_artifact_viewer_view_model
 from src.ui.i18n import ui_language_from_sources, ui_text
+from src.ui.beginner_surface_gate import gate_beginner_actions, action_blocked_by_beginner_gate
 from src.ui.execution_panel import ExecutionPanelViewModel, read_execution_panel_view_model
 from src.ui.panel_coordination import BuilderPanelCoordinationStateView, read_panel_coordination_state
 from src.ui.trace_timeline_viewer import TraceTimelineViewerViewModel, read_trace_timeline_view_model
@@ -485,7 +486,7 @@ def _action_shortcuts(
     shortcuts: list[MonitoringActionShortcutView] = []
     for action_id, priority, emphasis, explanation in shortcut_specs.get(workspace_status, []):
         action = action_map.get(action_id)
-        if action is None:
+        if action is None or action_blocked_by_beginner_gate(action):
             continue
         target_ref = focus.run_id if action_id in {"watch_run_progress", "replay_latest", "open_result_history"} else focus.selected_artifact_id
         shortcuts.append(MonitoringActionShortcutView(action=action, target_ref=target_ref, priority=priority, emphasis=emphasis, explanation=explanation))
@@ -506,8 +507,8 @@ def _workspace_handoff(
         return MonitoringWorkspaceHandoffView(
             destination_workspace="visual_editor",
             destination_panel="graph",
-            action_id=action.action_id if action is not None else None,
-            action_label=action.label if action is not None else None,
+            action_id=action.action_id if action is not None and not action_blocked_by_beginner_gate(action) else None,
+            action_label=action.label if action is not None and not action_blocked_by_beginner_gate(action) else None,
             reason=ui_text("workspace.runtime.handoff.empty", app_language=app_language, fallback_text="Return to the visual editor to prepare a workflow before monitoring."),
         )
     if workspace_status == "launch_ready":
@@ -516,8 +517,8 @@ def _workspace_handoff(
             destination_workspace="runtime_monitoring",
             destination_panel="execution",
             target_ref=focus.run_id,
-            action_id=action.action_id if action is not None else None,
-            action_label=action.label if action is not None else None,
+            action_id=action.action_id if action is not None and not action_blocked_by_beginner_gate(action) else None,
+            action_label=action.label if action is not None and not action_blocked_by_beginner_gate(action) else None,
             reason=ui_text("workspace.runtime.handoff.launch_ready", app_language=app_language, fallback_text="Stay in runtime monitoring and launch the approved workflow from here."),
         )
     if workspace_status == "live_monitoring":
@@ -526,8 +527,8 @@ def _workspace_handoff(
             destination_workspace="runtime_monitoring",
             destination_panel="execution",
             target_ref=focus.run_id,
-            action_id=action.action_id if action is not None else None,
-            action_label=action.label if action is not None else None,
+            action_id=action.action_id if action is not None and not action_blocked_by_beginner_gate(action) else None,
+            action_label=action.label if action is not None and not action_blocked_by_beginner_gate(action) else None,
             reason=ui_text("workspace.runtime.handoff.live_monitoring", app_language=app_language, fallback_text="Stay in runtime monitoring while the run is still active."),
         )
     if workspace_status == "failed_review":
@@ -537,14 +538,15 @@ def _workspace_handoff(
         return MonitoringWorkspaceHandoffView(
             destination_workspace=destination,
             destination_panel=panel,
-            action_id=action.action_id if action is not None else None,
-            action_label=action.label if action is not None else None,
+            action_id=action.action_id if action is not None and not action_blocked_by_beginner_gate(action) else None,
+            action_label=action.label if action is not None and not action_blocked_by_beginner_gate(action) else None,
             reason=ui_text("workspace.runtime.handoff.failed_review", app_language=app_language, fallback_text="Use runtime evidence here, then return to editing or configuration only if the failure points there."),
         )
     action = action_map.get("open_result_history") or action_map.get("replay_latest")
+    destination_panel = "execution" if action_blocked_by_beginner_gate(action) or action is None else "result_history"
     return MonitoringWorkspaceHandoffView(
         destination_workspace="runtime_monitoring",
-        destination_panel="result_history",
+        destination_panel=destination_panel,
         target_ref=focus.run_id,
         action_id=action.action_id if action is not None else None,
         action_label=action.label if action is not None else None,
@@ -574,8 +576,8 @@ def _attention_targets(
             summary=ui_text("workspace.runtime.attention.prepare.summary", app_language=app_language, fallback_text="Runtime monitoring has nothing concrete to inspect until a workflow is launched."),
             destination_workspace="visual_editor",
             destination_panel="graph",
-            action_id=action.action_id if action is not None else None,
-            action_label=action.label if action is not None else None,
+            action_id=action.action_id if action is not None and not action_blocked_by_beginner_gate(action) else None,
+            action_label=action.label if action is not None and not action_blocked_by_beginner_gate(action) else None,
             blocking=True,
         ))
     elif workspace_status == "launch_ready":
@@ -588,8 +590,8 @@ def _attention_targets(
             summary=ui_text("workspace.runtime.attention.launch.summary", app_language=app_language, fallback_text="This workflow is ready. Start it here to turn runtime monitoring into a live surface."),
             destination_workspace="runtime_monitoring",
             destination_panel="execution",
-            action_id=action.action_id if action is not None else None,
-            action_label=action.label if action is not None else None,
+            action_id=action.action_id if action is not None and not action_blocked_by_beginner_gate(action) else None,
+            action_label=action.label if action is not None and not action_blocked_by_beginner_gate(action) else None,
             blocking=False,
         ))
     elif workspace_status == "live_monitoring":
@@ -603,12 +605,14 @@ def _attention_targets(
             summary=ui_text("workspace.runtime.attention.live.summary", app_language=app_language, fallback_text="The run is currently centered on {label}. Stay here until the live execution settles.").format(label=active_label or "the active run"),
             destination_workspace="runtime_monitoring",
             destination_panel="execution",
-            action_id=action.action_id if action is not None else None,
-            action_label=action.label if action is not None else None,
+            action_id=action.action_id if action is not None and not action_blocked_by_beginner_gate(action) else None,
+            action_label=action.label if action is not None and not action_blocked_by_beginner_gate(action) else None,
             blocking=True,
         ))
         if artifact_vm is not None and artifact_vm.selected_artifact is not None:
             artifact_action = action_map.get("open_artifacts")
+            if artifact_action is None or action_blocked_by_beginner_gate(artifact_action):
+                return targets
             targets.append(MonitoringAttentionTargetView(
                 attention_kind="inspect_artifact",
                 urgency="medium",
@@ -630,9 +634,9 @@ def _attention_targets(
             title=ui_text("workspace.runtime.attention.failure.title", app_language=app_language, fallback_text="Review the failed run before replaying"),
             summary=ui_text("workspace.runtime.attention.failure.summary", app_language=app_language, fallback_text="The run still has blocking issues. Use runtime evidence to decide whether to replay or go back to editing."),
             destination_workspace="runtime_monitoring",
-            destination_panel="trace_timeline",
-            action_id=action.action_id if action is not None else None,
-            action_label=action.label if action is not None else None,
+            destination_panel="trace_timeline" if action is not None and not action_blocked_by_beginner_gate(action) else "execution",
+            action_id=action.action_id if action is not None and not action_blocked_by_beginner_gate(action) else None,
+            action_label=action.label if action is not None and not action_blocked_by_beginner_gate(action) else None,
             blocking=True,
         ))
     else:
@@ -644,9 +648,9 @@ def _attention_targets(
             title=ui_text("workspace.runtime.attention.history.title", app_language=app_language, fallback_text="Review the settled runtime evidence"),
             summary=ui_text("workspace.runtime.attention.history.summary", app_language=app_language, fallback_text="The live run is no longer active. Inspect the trace, artifacts, and replay posture together."),
             destination_workspace="runtime_monitoring",
-            destination_panel="result_history",
-            action_id=action.action_id if action is not None else None,
-            action_label=action.label if action is not None else None,
+            destination_panel="result_history" if action is not None and not action_blocked_by_beginner_gate(action) else "execution",
+            action_id=action.action_id if action is not None and not action_blocked_by_beginner_gate(action) else None,
+            action_label=action.label if action is not None and not action_blocked_by_beginner_gate(action) else None,
             blocking=False,
         ))
     return targets
@@ -699,8 +703,8 @@ def _progress_stages(
             label=ui_text(label_key, app_language=app_language, fallback_text=stage_id.title()),
             state=state,
             state_label=ui_text(f"workspace.runtime.progress.state.{state}", app_language=app_language, fallback_text=state.title()),
-            action_id=action.action_id if action is not None else None,
-            action_label=action.label if action is not None else None,
+            action_id=action.action_id if action is not None and not action_blocked_by_beginner_gate(action) else None,
+            action_label=action.label if action is not None and not action_blocked_by_beginner_gate(action) else None,
             target_ref=focus.run_id,
             explanation=stage_explanations[stage_id],
         ))
@@ -725,8 +729,8 @@ def _closure_barriers(
             severity="high",
             title=ui_text("workspace.runtime.barrier.no_execution.title", app_language=app_language, fallback_text="Launch a workflow before monitoring"),
             summary=ui_text("workspace.runtime.barrier.no_execution.summary", app_language=app_language, fallback_text="Runtime monitoring cannot close while there is still no execution to inspect."),
-            action_id=action.action_id if action is not None else None,
-            action_label=action.label if action is not None else None,
+            action_id=action.action_id if action is not None and not action_blocked_by_beginner_gate(action) else None,
+            action_label=action.label if action is not None and not action_blocked_by_beginner_gate(action) else None,
             destination_workspace="visual_editor",
             destination_panel="graph",
             blocking=True,
@@ -739,8 +743,8 @@ def _closure_barriers(
             target_ref=focus.run_id,
             title=ui_text("workspace.runtime.barrier.run_not_started.title", app_language=app_language, fallback_text="Start the run first"),
             summary=ui_text("workspace.runtime.barrier.run_not_started.summary", app_language=app_language, fallback_text="The workflow is approved, but runtime monitoring has not yet received a live run to watch."),
-            action_id=action.action_id if action is not None else None,
-            action_label=action.label if action is not None else None,
+            action_id=action.action_id if action is not None and not action_blocked_by_beginner_gate(action) else None,
+            action_label=action.label if action is not None and not action_blocked_by_beginner_gate(action) else None,
             destination_workspace="runtime_monitoring",
             destination_panel="execution",
             blocking=False,
@@ -753,8 +757,8 @@ def _closure_barriers(
             target_ref=focus.run_id,
             title=ui_text("workspace.runtime.barrier.run_in_progress.title", app_language=app_language, fallback_text="The run is still in progress"),
             summary=ui_text("workspace.runtime.barrier.run_in_progress.summary", app_language=app_language, fallback_text="Runtime monitoring should stay open while the current run is still active."),
-            action_id=action.action_id if action is not None else None,
-            action_label=action.label if action is not None else None,
+            action_id=action.action_id if action is not None and not action_blocked_by_beginner_gate(action) else None,
+            action_label=action.label if action is not None and not action_blocked_by_beginner_gate(action) else None,
             destination_workspace="runtime_monitoring",
             destination_panel="execution",
             blocking=True,
@@ -767,10 +771,10 @@ def _closure_barriers(
             target_ref=focus.run_id,
             title=ui_text("workspace.runtime.barrier.failed_run.title", app_language=app_language, fallback_text="The failed run still needs review"),
             summary=ui_text("workspace.runtime.barrier.failed_run.summary", app_language=app_language, fallback_text="Review the failed runtime evidence before deciding whether to replay or return to editing."),
-            action_id=action.action_id if action is not None else None,
-            action_label=action.label if action is not None else None,
+            action_id=action.action_id if action is not None and not action_blocked_by_beginner_gate(action) else None,
+            action_label=action.label if action is not None and not action_blocked_by_beginner_gate(action) else None,
             destination_workspace="runtime_monitoring",
-            destination_panel="trace_timeline",
+            destination_panel="trace_timeline" if action is not None and not action_blocked_by_beginner_gate(action) else "execution",
             blocking=True,
         ))
     if health.partial_surface_count:
@@ -781,10 +785,10 @@ def _closure_barriers(
             target_ref=focus.run_id,
             title=ui_text("workspace.runtime.barrier.partial_surfaces.title", app_language=app_language, fallback_text="Some runtime surfaces are still partial"),
             summary=ui_text("workspace.runtime.barrier.partial_surfaces.summary", app_language=app_language, fallback_text="Trace or artifact surfaces are still partial, so runtime monitoring is not fully settled yet."),
-            action_id=action.action_id if action is not None else None,
-            action_label=action.label if action is not None else None,
+            action_id=action.action_id if action is not None and not action_blocked_by_beginner_gate(action) else None,
+            action_label=action.label if action is not None and not action_blocked_by_beginner_gate(action) else None,
             destination_workspace="runtime_monitoring",
-            destination_panel="trace_timeline" if action is not None and action.action_id == "open_trace" else "artifact",
+            destination_panel=("trace_timeline" if action is not None and action.action_id == "open_trace" else ("artifact" if action is not None and not action_blocked_by_beginner_gate(action) else "execution")),
             blocking=False,
         ))
     return barriers
@@ -922,6 +926,7 @@ def read_runtime_monitoring_workspace_view_model(
         has_trace_events=bool(trace_vm and trace_vm.events),
         has_artifacts=bool(artifact_vm and artifact_vm.artifact_list),
     )
+    local_actions = gate_beginner_actions(local_actions, source_unwrapped)
     readiness = _readiness_view(
         workspace_status=workspace_status,
         app_language=app_language,
@@ -982,9 +987,12 @@ def read_runtime_monitoring_workspace_view_model(
         workspace_status=workspace_status,
         app_language=app_language,
     )
-    suggested_actions = _workspace_suggested_actions(
-        workspace_status=workspace_status,
-        app_language=app_language,
+    suggested_actions = gate_beginner_actions(
+        _workspace_suggested_actions(
+            workspace_status=workspace_status,
+            app_language=app_language,
+        ),
+        source_unwrapped,
     )
 
     return RuntimeMonitoringWorkspaceViewModel(
