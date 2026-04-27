@@ -184,13 +184,14 @@ def test_product_flow_shell_prioritizes_live_execution_control_plane_navigation(
     assert vm.shell_status == "live_run"
     assert vm.focus.active_workspace_id == "runtime_monitoring"
     assert vm.focus.active_right_panel_id == "execution"
-    assert vm.focus.active_bottom_panel_id == "trace_timeline"
+    assert vm.focus.active_bottom_panel_id == "validation"
+    assert vm.focus.focus_reason == "beginner_live_execution_beginner_gated"
     assert vm.stage.visible_event_count >= 1
     assert vm.stage.visible_artifact_count == 1
     assert vm.e2e_path is not None
     assert vm.e2e_path.path_status in {"followthrough", "terminal", "actionable", "terminal_review"}
     assert vm.closure is not None
-    assert any(target.target_id == "artifact" for target in vm.bottom_dock_targets)
+    assert all(target.target_id not in {"artifact", "trace_timeline", "diff", "storage", "result_history"} for target in vm.bottom_dock_targets)
     assert vm.command_entry_count > 0
 
 
@@ -314,9 +315,29 @@ def test_product_flow_shell_hides_advanced_targets_before_first_success() -> Non
 
     assert "trace_timeline" not in right_ids
     assert "artifact" not in right_ids
+    assert "result_history" not in right_ids
     assert "trace_timeline" not in bottom_ids
     assert "artifact" not in bottom_ids
     assert "diff" not in bottom_ids
+    assert "storage" not in bottom_ids
+    assert "result_history" not in bottom_ids
+
+
+def test_product_flow_shell_sanitizes_beginner_focus_when_metadata_requests_result_history() -> None:
+    source = _working_save()
+    source.ui.metadata.update({
+        "active_panel": "result_history",
+        "visible_panels": ["graph", "designer", "result_history", "storage"],
+        "panel_order": ["result_history", "storage", "designer"],
+    })
+
+    vm = read_product_flow_shell_view_model(source, validation_report=_validation_report())
+
+    assert vm.shell.diagnostics.beginner_mode is True
+    assert vm.focus.active_right_panel_id != "result_history"
+    assert vm.focus.active_bottom_panel_id not in {"storage", "result_history", "trace_timeline", "artifact", "diff"}
+    assert vm.focus.focus_reason.endswith("_beginner_gated")
+    assert all(target.target_id != "result_history" for target in vm.right_stack_targets + vm.bottom_dock_targets)
 
 
 def test_product_flow_shell_routes_empty_beginner_workspace_to_designer_first() -> None:
@@ -332,7 +353,7 @@ def test_product_flow_shell_routes_empty_beginner_workspace_to_designer_first() 
 
     assert vm.focus.active_workspace_id == "node_configuration"
     assert vm.focus.active_right_panel_id == "designer"
-    assert vm.focus.focus_reason == "start_with_goal"
+    assert vm.focus.focus_reason == "start_with_goal_beginner_gated"
 
 
 def test_product_flow_shell_prefers_execution_result_focus_for_beginner_run_review() -> None:
@@ -377,7 +398,7 @@ def test_product_flow_shell_preserves_explicit_visual_editor_action_focus() -> N
     vm = read_product_flow_shell_view_model(source, selected_action_id="open_visual_editor")
 
     assert vm.focus.active_workspace_id == "visual_editor"
-    assert vm.focus.focus_reason == "explicit_core_workspace_surface"
+    assert vm.focus.focus_reason == "explicit_core_workspace_surface_beginner_gated"
 
 
 def test_product_flow_shell_preserves_explicit_node_configuration_action_focus() -> None:

@@ -97,6 +97,75 @@ class ProductFlowShellViewModel:
 
 SourceLike = WorkingSaveModel | CommitSnapshotModel | ExecutionRecordModel | LoadedNexArtifact | None
 
+_SUPPRESSED_SURFACE_TO_PANEL = {
+    "trace_timeline": "trace_timeline",
+    "diff_viewer": "diff",
+    "artifact_viewer": "artifact",
+    "storage_panel": "storage",
+    "result_history": "result_history",
+}
+
+_ALLOWED_BEGINNER_FALLBACK_PANELS = ("validation", "execution", "designer", "inspector")
+
+
+def _suppressed_panel_ids(shell_vm: BuilderShellViewModel | None) -> set[str]:
+    if shell_vm is None:
+        return set()
+    policy = shell_vm.beginner_surface_policy
+    if not policy.visible or policy.can_open_advanced_surfaces:
+        return set()
+    return {
+        panel_id
+        for surface_id in policy.suppressed_surface_ids
+        for panel_id in [_SUPPRESSED_SURFACE_TO_PANEL.get(surface_id)]
+        if panel_id is not None
+    }
+
+
+def _fallback_panel_id(shell_vm: BuilderShellViewModel, *, preferred: tuple[str, ...] = _ALLOWED_BEGINNER_FALLBACK_PANELS) -> str:
+    available = {panel_id for panel_id in shell_vm.coordination.visible_panels}
+    for panel_id in preferred:
+        if panel_id in available:
+            return panel_id
+    if shell_vm.coordination.active_panel in available:
+        return shell_vm.coordination.active_panel
+    if available:
+        return sorted(available)[0]
+    return "designer" if shell_vm.designer is not None else "validation"
+
+
+def _sanitize_focus_for_beginner_policy(shell_vm: BuilderShellViewModel, focus: ProductFlowFocusView, *, app_language: str) -> ProductFlowFocusView:
+    suppressed = _suppressed_panel_ids(shell_vm)
+    if not suppressed:
+        return focus
+    right_panel_id = focus.active_right_panel_id
+    bottom_panel_id = focus.active_bottom_panel_id
+    changed = False
+    if right_panel_id in suppressed:
+        right_panel_id = _fallback_panel_id(shell_vm, preferred=("execution", "validation", "designer", "inspector"))
+        changed = True
+    if bottom_panel_id in suppressed:
+        bottom_panel_id = _fallback_panel_id(shell_vm, preferred=("validation", "execution", "designer", "inspector"))
+        changed = True
+    if not changed:
+        return focus
+    reason = focus.focus_reason or "steady_state"
+    if not reason.endswith("_beginner_gated"):
+        reason = f"{reason}_beginner_gated"
+    return ProductFlowFocusView(
+        active_workspace_id=focus.active_workspace_id,
+        active_workspace_label=focus.active_workspace_label,
+        active_right_panel_id=right_panel_id,
+        active_right_panel_label=_panel_label(right_panel_id, app_language=app_language),
+        active_bottom_panel_id=bottom_panel_id,
+        active_bottom_panel_label=_panel_label(bottom_panel_id, app_language=app_language),
+        recommended_action_id=focus.recommended_action_id,
+        recommended_flow_id=focus.recommended_flow_id,
+        focus_reason=reason,
+    )
+
+
+
 
 def _unwrap(source: SourceLike):
     if isinstance(source, LoadedNexArtifact):
@@ -203,7 +272,7 @@ def _focus(shell_vm: BuilderShellViewModel | None, stage_id: str, recommended_ac
     focus_reason = "steady_state"
     explicit_panel = shell_vm.coordination.active_panel
     if explicit_panel in {"circuit_library", "feedback_channel"}:
-        return ProductFlowFocusView(
+        return _sanitize_focus_for_beginner_policy(shell_vm, ProductFlowFocusView(
             active_workspace_id="library",
             active_workspace_label=_workspace_label("library", app_language=app_language),
             active_right_panel_id=explicit_panel,
@@ -213,9 +282,9 @@ def _focus(shell_vm: BuilderShellViewModel | None, stage_id: str, recommended_ac
             recommended_action_id=recommended_action_id,
             recommended_flow_id=recommended_flow_id,
             focus_reason="explicit_return_use_surface",
-        )
+        ), app_language=app_language)
     if explicit_panel == "result_history":
-        return ProductFlowFocusView(
+        return _sanitize_focus_for_beginner_policy(shell_vm, ProductFlowFocusView(
             active_workspace_id="runtime_monitoring",
             active_workspace_label=_workspace_label("runtime_monitoring", app_language=app_language),
             active_right_panel_id="result_history",
@@ -225,10 +294,10 @@ def _focus(shell_vm: BuilderShellViewModel | None, stage_id: str, recommended_ac
             recommended_action_id=recommended_action_id,
             recommended_flow_id=recommended_flow_id,
             focus_reason="explicit_return_use_surface",
-        )
+        ), app_language=app_language)
     explicit_core_focus = _requested_core_workspace_focus(selected_action_id, shell_vm, app_language=app_language)
     if explicit_core_focus is not None:
-        return ProductFlowFocusView(active_workspace_id=explicit_core_focus.active_workspace_id, active_workspace_label=explicit_core_focus.active_workspace_label, active_right_panel_id=explicit_core_focus.active_right_panel_id, active_right_panel_label=explicit_core_focus.active_right_panel_label, active_bottom_panel_id=explicit_core_focus.active_bottom_panel_id, active_bottom_panel_label=explicit_core_focus.active_bottom_panel_label, recommended_action_id=recommended_action_id, recommended_flow_id=recommended_flow_id, focus_reason=explicit_core_focus.focus_reason)
+        return _sanitize_focus_for_beginner_policy(shell_vm, ProductFlowFocusView(active_workspace_id=explicit_core_focus.active_workspace_id, active_workspace_label=explicit_core_focus.active_workspace_label, active_right_panel_id=explicit_core_focus.active_right_panel_id, active_right_panel_label=explicit_core_focus.active_right_panel_label, active_bottom_panel_id=explicit_core_focus.active_bottom_panel_id, active_bottom_panel_label=explicit_core_focus.active_bottom_panel_label, recommended_action_id=recommended_action_id, recommended_flow_id=recommended_flow_id, focus_reason=explicit_core_focus.focus_reason), app_language=app_language)
     beginner_empty_designer = (
         shell_vm.diagnostics.beginner_mode
         and shell_vm.diagnostics.empty_workspace_mode
@@ -322,7 +391,7 @@ def _focus(shell_vm: BuilderShellViewModel | None, stage_id: str, recommended_ac
             active_right_panel_id = handoff.followthrough_panel_id
             focus_reason = "handoff_followthrough"
 
-    return ProductFlowFocusView(
+    return _sanitize_focus_for_beginner_policy(shell_vm, ProductFlowFocusView(
         active_workspace_id=active_workspace_id,
         active_workspace_label=_workspace_label(active_workspace_id, app_language=app_language),
         active_right_panel_id=active_right_panel_id,
@@ -332,7 +401,7 @@ def _focus(shell_vm: BuilderShellViewModel | None, stage_id: str, recommended_ac
         recommended_action_id=recommended_action_id,
         recommended_flow_id=recommended_flow_id,
         focus_reason=focus_reason,
-    )
+    ), app_language=app_language)
 
 
 def _surface_targets(shell_vm: BuilderShellViewModel | None, *, app_language: str, focus: ProductFlowFocusView) -> tuple[list[ProductFlowSurfaceTargetView], list[ProductFlowSurfaceTargetView]]:
@@ -341,11 +410,7 @@ def _surface_targets(shell_vm: BuilderShellViewModel | None, *, app_language: st
 
     right_stack_ids = ["inspector", "designer", "validation", "execution", "trace_timeline", "artifact", "circuit_library", "result_history", "feedback_channel"]
     bottom_dock_ids = ["validation", "storage", "execution", "trace_timeline", "artifact", "diff", "result_history", "feedback_channel"]
-    hidden_in_beginner = set()
-    if shell_vm.diagnostics.beginner_mode and not shell_vm.diagnostics.advanced_surfaces_unlocked:
-        hidden_in_beginner = {"trace_timeline", "diff"}
-        if shell_vm.execution is None or shell_vm.execution.execution_status not in {"running", "queued"}:
-            hidden_in_beginner.add("artifact")
+    hidden_in_beginner = _suppressed_panel_ids(shell_vm)
 
     status_by_panel = {
         "inspector": "ready" if shell_vm.inspector is not None else "empty",
