@@ -114,3 +114,5 @@ def test_execution_launch_workflow_hides_replay_and_diff_actions_before_first_su
     action_ids = {action.action_id for action in vm.action_schema.secondary_actions}
     assert "replay_latest" not in action_ids
     assert "open_diff" not in action_ids
+    assert vm.action_state.replay_action is None
+    assert vm.action_state.compare_action is None

@@ -8,6 +8,7 @@ from src.storage.models.execution_record_model import ExecutionRecordModel
 from src.storage.models.loaded_nex_artifact import LoadedNexArtifact
 from src.storage.models.working_save_model import WorkingSaveModel
 from src.ui.action_schema import BuilderActionSchemaView, BuilderActionView, read_builder_action_schema
+from src.ui.beginner_surface_gate import action_blocked_by_beginner_gate
 from src.ui.i18n import ui_language_from_sources, ui_text
 from src.ui.runtime_monitoring_workspace import RuntimeMonitoringWorkspaceViewModel, read_runtime_monitoring_workspace_view_model
 from src.ui.storage_panel import StoragePanelViewModel, read_storage_view_model
@@ -92,6 +93,27 @@ def _preferred_action(action_schema: BuilderActionSchemaView, *action_ids: str) 
     return fallback
 
 
+def _hide_beginner_gated_actions(action_schema: BuilderActionSchemaView) -> BuilderActionSchemaView:
+    primary_actions = [action for action in action_schema.primary_actions if not action_blocked_by_beginner_gate(action)]
+    secondary_actions = [action for action in action_schema.secondary_actions if not action_blocked_by_beginner_gate(action)]
+    contextual_actions = [action for action in action_schema.contextual_actions if not action_blocked_by_beginner_gate(action)]
+    if (
+        len(primary_actions) == len(action_schema.primary_actions)
+        and len(secondary_actions) == len(action_schema.secondary_actions)
+        and len(contextual_actions) == len(action_schema.contextual_actions)
+    ):
+        return action_schema
+    all_actions = [*primary_actions, *secondary_actions, *contextual_actions]
+    return BuilderActionSchemaView(
+        schema_status=action_schema.schema_status,
+        source_role=action_schema.source_role,
+        primary_actions=primary_actions,
+        secondary_actions=secondary_actions,
+        contextual_actions=contextual_actions,
+        disabled_action_count=sum(1 for action in all_actions if not action.enabled),
+        explanation=action_schema.explanation,
+    )
+
 def read_execution_launch_workflow_view_model(
     source: SourceLike,
     *,
@@ -128,6 +150,8 @@ def read_execution_launch_workflow_view_model(
         validation_view=monitoring_vm.validation if monitoring_vm is not None else None,
         execution_view=monitoring_vm.execution if monitoring_vm is not None else None,
     )
+    action_schema = _hide_beginner_gated_actions(action_schema)
+
 
     if storage_role == "commit_snapshot":
         run_action = _preferred_action(action_schema, "run_from_commit", "run_current")

@@ -7,6 +7,7 @@ from src.storage.models.execution_record_model import ExecutionArtifactsModel, E
 from src.storage.models.shared_sections import CircuitModel, ResourcesModel, StateModel
 from src.storage.models.working_save_model import RuntimeModel, UIModel, WorkingSaveMeta, WorkingSaveModel
 from src.ui.action_schema import read_builder_action_schema
+from src.ui.beginner_surface_gate import BEGINNER_LOCKED_DEEP_SURFACE_REASON
 from src.ui.execution_panel import read_execution_panel_view_model
 from src.ui.storage_panel import read_storage_view_model
 from src.ui.validation_panel import read_validation_panel_view_model
@@ -189,6 +190,25 @@ def test_action_schema_surfaces_watch_progress_action_for_running_execution() ->
     vm = read_builder_action_schema(_working_save(), execution_view=execution)
     actions = {a.action_id: a for a in vm.primary_actions + vm.secondary_actions + vm.contextual_actions}
     assert actions["watch_run_progress"].enabled is True
+
+
+
+
+def test_action_schema_disables_deep_actions_before_first_success_even_with_completed_execution() -> None:
+    working = _working_save()
+    storage = read_storage_view_model(working, latest_execution_record=_run())
+    execution = read_execution_panel_view_model(working, execution_record=_run(status="completed"))
+
+    vm = read_builder_action_schema(working, storage_view=storage, execution_view=execution)
+    actions = {a.action_id: a for a in vm.primary_actions + vm.secondary_actions + vm.contextual_actions}
+
+    assert "open_visual_editor" not in actions
+    assert "open_node_configuration" not in actions
+    assert "open_runtime_monitoring" not in actions
+    assert actions["replay_latest"].enabled is False
+    assert actions["open_diff"].enabled is False
+    assert actions["replay_latest"].reason_disabled == BEGINNER_LOCKED_DEEP_SURFACE_REASON
+    assert actions["open_diff"].reason_disabled == BEGINNER_LOCKED_DEEP_SURFACE_REASON
 
 
 def test_action_schema_surfaces_core_workspace_navigation_actions_after_beginner_unlock() -> None:

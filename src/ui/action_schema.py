@@ -10,7 +10,8 @@ from src.ui.designer_panel import DesignerPanelViewModel
 from src.ui.execution_panel import ExecutionPanelViewModel
 from src.ui.storage_panel import StoragePanelViewModel
 from src.ui.validation_panel import ValidationPanelViewModel
-from src.ui.i18n import beginner_advanced_surfaces_unlocked, beginner_surface_active, ui_language_from_sources, ui_text
+from src.ui.i18n import ui_language_from_sources, ui_text
+from src.ui.beginner_surface_gate import beginner_deep_surface_gate_active, gate_beginner_actions
 
 
 @dataclass(frozen=True)
@@ -161,11 +162,7 @@ def read_builder_action_schema(
         and execution_view.waiting_feedback.visible
     )
 
-    beginner_preunlock = False
-    if beginner_surface_active(source) and not beginner_advanced_surfaces_unlocked(source):
-        beginner_preunlock = True
-        if execution_view is not None and execution_view.execution_status == "completed" and execution_view.run_identity.run_id is not None:
-            beginner_preunlock = False
+    beginner_preunlock = beginner_deep_surface_gate_active(source)
 
     working_primary_actions = [
         _action(
@@ -219,28 +216,7 @@ def read_builder_action_schema(
     graph_navigation_available = isinstance(source, (WorkingSaveModel, CommitSnapshotModel))
     runtime_navigation_available = execution_view is not None
 
-    generic_secondary_actions = [] if beginner_preunlock else [
-        _action(
-            "open_visual_editor",
-            ui_text("builder.action.open_visual_editor", app_language=app_language),
-            "workspace_navigation",
-            graph_navigation_available,
-            reason_disabled=None if graph_navigation_available else ui_text("builder.reason.visual_editor_requires_graph", app_language=app_language),
-        ),
-        _action(
-            "open_node_configuration",
-            ui_text("builder.action.open_node_configuration", app_language=app_language),
-            "workspace_navigation",
-            graph_navigation_available,
-            reason_disabled=None if graph_navigation_available else ui_text("builder.reason.configuration_requires_graph", app_language=app_language),
-        ),
-        _action(
-            "open_runtime_monitoring",
-            ui_text("builder.action.open_runtime_monitoring", app_language=app_language),
-            "workspace_navigation",
-            runtime_navigation_available,
-            reason_disabled=None if runtime_navigation_available else ui_text("builder.reason.runtime_monitoring_requires_execution", app_language=app_language),
-        ),
+    deep_secondary_actions = [
         _action(
             "replay_latest",
             ui_text("builder.action.replay_latest", app_language=app_language),
@@ -266,6 +242,35 @@ def read_builder_action_schema(
             ),
         ),
     ]
+
+    generic_secondary_actions = (
+        deep_secondary_actions
+        if beginner_preunlock
+        else [
+            _action(
+                "open_visual_editor",
+                ui_text("builder.action.open_visual_editor", app_language=app_language),
+                "workspace_navigation",
+                graph_navigation_available,
+                reason_disabled=None if graph_navigation_available else ui_text("builder.reason.visual_editor_requires_graph", app_language=app_language),
+            ),
+            _action(
+                "open_node_configuration",
+                ui_text("builder.action.open_node_configuration", app_language=app_language),
+                "workspace_navigation",
+                graph_navigation_available,
+                reason_disabled=None if graph_navigation_available else ui_text("builder.reason.configuration_requires_graph", app_language=app_language),
+            ),
+            _action(
+                "open_runtime_monitoring",
+                ui_text("builder.action.open_runtime_monitoring", app_language=app_language),
+                "workspace_navigation",
+                runtime_navigation_available,
+                reason_disabled=None if runtime_navigation_available else ui_text("builder.reason.runtime_monitoring_requires_execution", app_language=app_language),
+            ),
+            *deep_secondary_actions,
+        ]
+    )
 
     primary_actions = list(working_primary_actions)
     secondary_actions = list(generic_secondary_actions)
@@ -403,6 +408,10 @@ def read_builder_action_schema(
                 ),
             ]
         )
+
+    primary_actions = gate_beginner_actions(primary_actions, source)
+    secondary_actions = gate_beginner_actions(secondary_actions, source)
+    contextual_actions = gate_beginner_actions(contextual_actions, source)
 
     all_actions = primary_actions + secondary_actions + contextual_actions
     return BuilderActionSchemaView(
