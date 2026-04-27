@@ -1010,7 +1010,12 @@ def _first_success_setup_section(
 
     if setup_state == "goal_entry_needed":
         _append_control("setup-open-designer", ui_text("server.shell.open_designer", app_language=app_language, fallback_text="Open Designer"), "designer")
-        _append_control("setup-open-starter-templates", ui_text("server.shell.open_starter_templates", app_language=app_language, fallback_text="Open starter templates"), starter_templates_target)
+        if current_step_id == "run":
+            _append_control("setup-open-onboarding", ui_text("server.shell.open_onboarding", app_language=app_language, fallback_text="Open onboarding"), onboarding_target)
+            _append_control("setup-open-starter-templates", ui_text("server.shell.open_starter_templates", app_language=app_language, fallback_text="Open starter templates"), starter_templates_target)
+        else:
+            _append_control("setup-open-starter-templates", ui_text("server.shell.open_starter_templates", app_language=app_language, fallback_text="Open starter templates"), starter_templates_target)
+            _append_control("setup-open-onboarding", ui_text("server.shell.open_onboarding", app_language=app_language, fallback_text="Open onboarding"), onboarding_target)
     elif setup_state == "starter_template_path":
         _append_control("setup-open-starter-templates", ui_text("server.shell.open_starter_templates", app_language=app_language, fallback_text="Open starter templates"), starter_templates_target)
         _append_control("setup-open-designer", ui_text("server.shell.open_designer", app_language=app_language, fallback_text="Open Designer"), "designer")
@@ -1844,7 +1849,7 @@ def _feedback_continuity_section(
     setup_stage = dict(stages[0]) if len(stages) > 0 and isinstance(stages[0], Mapping) else {}
     run_stage = dict(stages[1]) if len(stages) > 1 and isinstance(stages[1], Mapping) else {}
     return_stage = dict(stages[2]) if len(stages) > 2 and isinstance(stages[2], Mapping) else {}
-    first_success_established = bool((onboarding_state or {}).get("first_success_achieved")) or str(return_stage.get("return_path_kind") or "").strip() not in {"", "first_success_prerequisite"}
+    first_success_established = bool((onboarding_state or {}).get("first_success_achieved"))
 
     feedback_api_target = str(routes.get("workspace_feedback") or f"/api/workspaces/{workspace_id}/feedback").strip() or None
     feedback_page_target = str(routes.get("workspace_feedback_page") or f"/app/workspaces/{workspace_id}/feedback").strip() or None
@@ -2929,7 +2934,7 @@ def _server_product_readiness_review(
         entry_path_kind = "onboarding_continuation"
     elif has_selected_template:
         entry_path_kind = "starter_template"
-    first_success = bool((onboarding_state or {}).get("first_success_achieved")) or str((latest_run_result_preview or {}).get("result_state") or "").strip() in {"ready_success", "ready_partial"}
+    first_success = bool((onboarding_state or {}).get("first_success_achieved"))
     provider_setup_readiness = evaluate_required_provider_setup(
         workspace_id=workspace_id,
         source_payload=artifact_model,
@@ -2960,11 +2965,12 @@ def _server_product_readiness_review(
     current_status = str((latest_run_status_preview or {}).get("execution_state") or (latest_run_row or {}).get("status") or "").strip()
     run_active = current_status in {"queued", "running", "paused", "claimed", "pending", "in_progress"}
     result_ready = str((latest_run_result_preview or {}).get("result_state") or "").strip() in {"ready_success", "ready_partial"}
+    result_reading_path_complete = bool(result_ready and has_history and has_result_history_route)
     validation_status = str(((shell_map.get("validation") or {}).get("overall_status") or "")).strip()
     graph_nodes = tuple(((shell_map.get("graph") or {}).get("nodes") or ()))
     has_existing_structure = bool(graph_nodes) or str(shell_map.get("storage_role") or "").strip() in {"commit_snapshot", "execution_record"}
 
-    if first_success:
+    if first_success or result_reading_path_complete:
         setup_state = "complete"
         setup_blockers = 0
         setup_pending = 0
@@ -3083,6 +3089,10 @@ def _server_product_readiness_review(
         setup_stage["provider_setup_reason_code"] = provider_setup_readiness.primary_finding.reason_code
     setup_stage["selected_template_display_name"] = selected_template_display_name or None
     setup_stage["step_order"] = ["choose_entry_path", "connect_provider", "review_draft", "run"]
+    if result_ready and not first_success:
+        setup_stage["current_step_id"] = "run"
+        setup_stage["next_step_id"] = "read_result"
+
 
     if result_ready:
         run_state = "complete"
@@ -3198,7 +3208,7 @@ def _server_product_readiness_review(
     result_history_target = str(routes.get("workspace_result_history_page") or routes.get("workspace_result_history") or routes.get("latest_run_result") or "").strip() or None
     feedback_target = str(routes.get("workspace_feedback_page") or routes.get("workspace_feedback") or "").strip() or None
 
-    if not first_success:
+    if (not first_success) and not result_reading_path_complete:
         return_state = "inactive"
         return_blockers = 0
         return_pending = 0
@@ -3289,7 +3299,7 @@ def _server_product_readiness_review(
             app_language=app_language,
             fallback_text="The next real product bottleneck is still inside the first-success setup path. Finish goal entry or provider setup before widening scope.",
         )
-    elif run_stage["blocker_count"] or run_stage["stage_state"] in {"fix_before_run", "ready_to_run", "run_in_progress", "waiting"}:
+    elif ((not first_success) and not result_reading_path_complete) or run_stage["blocker_count"] or run_stage["stage_state"] in {"fix_before_run", "ready_to_run", "run_in_progress", "waiting"}:
         review_state = "hold_first_success_run"
         bottleneck_stage = run_stage
         summary = ui_text(
