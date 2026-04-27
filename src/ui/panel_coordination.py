@@ -20,6 +20,7 @@ from src.ui.trace_timeline_viewer import TraceTimelineViewerViewModel
 from src.ui.artifact_viewer import ArtifactViewerViewModel
 from src.ui.i18n import ui_language_from_sources, ui_text
 from src.ui.beginner_surface_gate import BEGINNER_LOCKED_DEEP_SURFACE_PANEL_IDS
+from src.ui.beginner_milestones import beginner_advanced_surfaces_unlocked
 
 _ADVANCED_ONLY_PANELS = BEGINNER_LOCKED_DEEP_SURFACE_PANEL_IDS
 _CORE_BEGINNER_PANELS = {"graph", "inspector", "validation", "execution", "designer", "circuit_library", "feedback_channel"}
@@ -116,8 +117,7 @@ def _beginner_gate_active(
 ) -> bool:
     if not isinstance(source, WorkingSaveModel):
         return False
-    metadata = _ui_metadata(source)
-    return not _advanced_surfaces_unlocked(metadata, execution_view=execution_view)
+    return not beginner_advanced_surfaces_unlocked(source)
 
 
 def _beginner_shell_active(

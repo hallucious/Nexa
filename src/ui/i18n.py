@@ -8,6 +8,13 @@ from src.storage.models.execution_record_model import ExecutionRecordModel
 from src.storage.models.loaded_nex_artifact import LoadedNexArtifact
 from src.storage.models.working_save_model import WorkingSaveModel
 
+from src.ui.beginner_milestones import (
+    beginner_advanced_surfaces_unlocked as _milestone_beginner_advanced_surfaces_unlocked,
+    beginner_language_enabled as _milestone_beginner_language_enabled,
+    beginner_surface_active as _milestone_beginner_surface_active,
+    explicit_beginner_first_success_achieved as _milestone_beginner_first_success_achieved,
+)
+
 DEFAULT_UI_LANGUAGE = "en"
 SUPPORTED_UI_LANGUAGES = ("en", "ko")
 
@@ -2931,42 +2938,19 @@ def _beginner_metadata_from_source(source: Any) -> Mapping[str, Any]:
 
 
 def _beginner_first_success_achieved(*sources: Any) -> bool:
-    for source in sources:
-        source = _unwrap_beginner_source(source)
-        metadata = _beginner_metadata_from_source(source)
-        if bool(metadata.get('beginner_first_success_achieved')):
-            return True
-    return False
+    return _milestone_beginner_first_success_achieved(*sources)
 
 
 def beginner_surface_active(*sources: Any) -> bool:
-    has_working_save = False
-    for source in sources:
-        source = _unwrap_beginner_source(source)
-        if isinstance(source, WorkingSaveModel):
-            has_working_save = True
-            metadata = _beginner_metadata_from_source(source)
-            if bool(metadata.get('advanced_mode_requested')):
-                return False
-            if str(metadata.get('user_mode') or '').lower() == 'advanced':
-                return False
-    return has_working_save
+    return _milestone_beginner_surface_active(*sources)
 
 
 def beginner_advanced_surfaces_unlocked(*sources: Any) -> bool:
-    if not beginner_surface_active(*sources):
-        return True
-    for source in sources:
-        metadata = _beginner_metadata_from_source(_unwrap_beginner_source(source))
-        if bool(metadata.get('advanced_surfaces_unlocked')):
-            return True
-    return _beginner_first_success_achieved(*sources)
+    return _milestone_beginner_advanced_surfaces_unlocked(*sources)
 
 
 def beginner_language_enabled(*sources: Any) -> bool:
-    if not beginner_surface_active(*sources):
-        return False
-    return not beginner_advanced_surfaces_unlocked(*sources)
+    return _milestone_beginner_language_enabled(*sources)
 
 
 def beginner_ui_text(text_key: str, *, beginner_text_key: str | None = None, sources: tuple[Any, ...] = (), app_language: str | None = None, fallback_text: str | None = None, params: Mapping[str, Any] | None = None, **kwargs: Any) -> str:

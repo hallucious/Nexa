@@ -30,6 +30,7 @@ from src.ui.graph_workspace import GraphPreviewOverlay, GraphWorkspaceViewModel,
 from src.ui.inspector_panel import SelectedObjectViewModel, read_selected_object_view_model
 from src.ui.i18n import beginner_ui_text, ui_language_from_sources, ui_text
 from src.ui.beginner_surface_gate import beginner_locked_policy_surface_ids
+from src.ui.beginner_milestones import explicit_beginner_first_success_achieved, return_use_ready, terminal_execution_record_view
 from src.ui.panel_coordination import BuilderPanelCoordinationStateView, read_panel_coordination_state
 from src.ui.top_bar import BuilderTopBarViewModel, read_builder_top_bar_view_model
 from src.ui.command_palette import CommandPaletteViewModel, read_command_palette_view_model
@@ -663,11 +664,8 @@ def _product_stage(*, stage_id: str, stage_label: str | None, stage_state: str, 
 
 def _first_success_achieved(*, source, execution_record: ExecutionRecordModel | None, execution_vm: ExecutionPanelViewModel | None) -> bool:
     if isinstance(source, WorkingSaveModel):
-        metadata = _ui_metadata(source)
-        return bool(metadata.get("beginner_first_success_achieved"))
-    if isinstance(source, ExecutionRecordModel):
-        return source.meta.status in {"completed", "partial"}
-    return False
+        return explicit_beginner_first_success_achieved(source)
+    return terminal_execution_record_view(source)
 
 
 def _run_action_enabled(execution_vm: ExecutionPanelViewModel | None) -> bool:
@@ -804,7 +802,7 @@ def _product_readiness_review(*, source, execution_record: ExecutionRecordModel 
         app_language=app_language,
     )
 
-    return_use_unlocked = first_success or isinstance(source, ExecutionRecordModel)
+    return_use_unlocked = first_success or return_use_ready(source)
     has_history = bool(result_history_vm is not None and result_history_vm.visible and result_history_vm.returned_count > 0)
     has_library = bool(circuit_library_vm is not None and circuit_library_vm.visible)
     has_feedback = bool(feedback_channel_vm is not None and feedback_channel_vm.visible)

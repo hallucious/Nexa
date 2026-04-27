@@ -12,6 +12,7 @@ from src.ui.storage_panel import StoragePanelViewModel
 from src.ui.validation_panel import ValidationPanelViewModel
 from src.ui.i18n import ui_language_from_sources, ui_text
 from src.ui.beginner_surface_gate import beginner_deep_surface_gate_active, gate_beginner_actions
+from src.ui.beginner_milestones import return_use_ready
 
 
 @dataclass(frozen=True)
@@ -68,10 +69,7 @@ def _workspace_anchor_id(source) -> str | None:
 
 
 def _return_use_ready(source) -> bool:
-    if isinstance(source, ExecutionRecordModel):
-        return True
-    metadata = _ui_metadata(source)
-    return bool(metadata.get("beginner_first_success_achieved"))
+    return return_use_ready(source)
 
 
 def _action(action_id: str, label: str, action_kind: str, enabled: bool, *, reason_disabled: str | None = None, destructive: bool = False, requires_confirmation: bool = False) -> BuilderActionView:

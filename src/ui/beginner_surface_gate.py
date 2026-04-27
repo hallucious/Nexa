@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import replace
 from typing import Iterable, Any
 
-from src.ui.i18n import beginner_advanced_surfaces_unlocked, beginner_surface_active
+from src.ui.beginner_milestones import beginner_advanced_surfaces_unlocked, beginner_surface_active
 
 
 BEGINNER_LOCKED_DEEP_SURFACE_ACTION_IDS = frozenset({

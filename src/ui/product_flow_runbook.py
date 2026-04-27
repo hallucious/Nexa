@@ -15,6 +15,7 @@ from src.storage.models.loaded_nex_artifact import LoadedNexArtifact
 from src.storage.models.working_save_model import WorkingSaveModel
 from src.ui.builder_workflow_hub import BuilderWorkflowHubViewModel, read_builder_workflow_hub_view_model
 from src.ui.beginner_surface_gate import beginner_deep_surface_gate_active
+from src.ui.beginner_milestones import return_use_ready
 from src.ui.i18n import beginner_surface_active, ui_language_from_sources, ui_text
 from src.ui.product_flow_journey import ProductFlowJourneyViewModel, ProductFlowJourneyStepView, read_product_flow_journey_view_model
 
@@ -75,9 +76,7 @@ def _ui_metadata(source) -> dict[str, object]:
 
 
 def _return_use_ready(source) -> bool:
-    if isinstance(source, ExecutionRecordModel):
-        return True
-    return bool(_ui_metadata(source).get("beginner_first_success_achieved"))
+    return return_use_ready(source)
 
 
 def _workspace_anchor_id(source) -> str | None:

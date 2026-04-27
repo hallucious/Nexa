@@ -15,6 +15,7 @@ from src.storage.models.loaded_nex_artifact import LoadedNexArtifact
 from src.storage.models.working_save_model import WorkingSaveModel
 from src.ui.builder_workflow_hub import BuilderWorkflowHubViewModel, read_builder_workflow_hub_view_model
 from src.ui.beginner_surface_gate import beginner_deep_surface_gate_active
+from src.ui.beginner_milestones import beginner_advanced_surfaces_unlocked
 from src.ui.i18n import beginner_surface_active, ui_language_from_sources, ui_text
 
 
@@ -67,13 +68,7 @@ def _storage_role(source) -> str:
 
 def _explicit_first_success_unlocked(source) -> bool:
     if isinstance(source, WorkingSaveModel):
-        metadata = dict(source.ui.metadata or {})
-        return bool(
-            metadata.get("beginner_first_success_achieved")
-            or metadata.get("advanced_surfaces_unlocked")
-            or metadata.get("advanced_mode_requested")
-            or str(metadata.get("user_mode") or "").lower() == "advanced"
-        )
+        return beginner_advanced_surfaces_unlocked(source)
     return False
 
 
