@@ -14,6 +14,7 @@ from src.storage.models.execution_record_model import ExecutionRecordModel
 from src.storage.models.loaded_nex_artifact import LoadedNexArtifact
 from src.storage.models.working_save_model import WorkingSaveModel
 from src.ui.execution_launch_workflow import ExecutionLaunchWorkflowViewModel, read_execution_launch_workflow_view_model
+from src.ui.beginner_surface_gate import beginner_deep_surface_gate_active
 from src.ui.i18n import ui_language_from_sources, ui_text
 from src.ui.proposal_commit_workflow import ProposalCommitWorkflowViewModel, read_proposal_commit_workflow_view_model
 
@@ -211,10 +212,14 @@ def _run_stage(execution: ExecutionLaunchWorkflowViewModel | None, *, app_langua
     )
 
 
-def _followthrough_stage(execution: ExecutionLaunchWorkflowViewModel | None, *, source_role: str, app_language: str) -> ProductFlowGatewayStageView:
+def _followthrough_stage(execution: ExecutionLaunchWorkflowViewModel | None, *, source_role: str, app_language: str, beginner_deep_gate_active: bool = False) -> ProductFlowGatewayStageView:
     live = bool(execution is not None and execution.workflow_status == "live_monitoring")
-    has_outputs = bool(execution is not None and (execution.summary.visible_event_count > 0 or execution.summary.visible_artifact_count > 0 or execution.summary.run_id is not None or source_role == "execution_record"))
-    required_action_id = _preferred_followthrough_action(execution, source_role=source_role)
+    if beginner_deep_gate_active and source_role == "working_save" and not live:
+        has_outputs = False
+        required_action_id = None
+    else:
+        has_outputs = bool(execution is not None and (execution.summary.visible_event_count > 0 or execution.summary.visible_artifact_count > 0 or execution.summary.run_id is not None or source_role == "execution_record"))
+        required_action_id = _preferred_followthrough_action(execution, source_role=source_role)
     actionable = required_action_id is not None
     boundary_ready = has_outputs
     if live:
@@ -285,11 +290,12 @@ def read_product_flow_gateway_view_model(
         execution_record=execution_record,
     )
 
+    beginner_deep_gate = beginner_deep_surface_gate_active(source_unwrapped, execution_record)
     stages = [
         _review_stage(proposal_commit, app_language=app_language),
         _commit_stage(proposal_commit, app_language=app_language),
         _run_stage(execution_launch, app_language=app_language),
-        _followthrough_stage(execution_launch, source_role=source_role, app_language=app_language),
+        _followthrough_stage(execution_launch, source_role=source_role, app_language=app_language, beginner_deep_gate_active=beginner_deep_gate),
     ]
 
     stage_by_id = {stage.gateway_id: stage for stage in stages}

@@ -259,9 +259,14 @@ def read_product_flow_runbook_view_model(
         and execution_view.waiting_feedback.visible
     )
 
-    inspect_trace_status = "complete" if _has_trace(workflow_hub) and observe_step is not None and observe_step.complete else ("ready" if _has_trace(workflow_hub) else _entry_status_from_step(observe_step))
-    inspect_artifact_status = "complete" if _has_artifacts(workflow_hub) and observe_step is not None and observe_step.complete else ("ready" if _has_artifacts(workflow_hub) else _entry_status_from_step(observe_step))
-    compare_results_status = "complete" if _has_diff(workflow_hub) and observe_step is not None and observe_step.complete else ("ready" if _has_diff(workflow_hub) else _entry_status_from_step(observe_step))
+    if beginner_deep_gate_active:
+        inspect_trace_status = "inactive"
+        inspect_artifact_status = "inactive"
+        compare_results_status = "inactive"
+    else:
+        inspect_trace_status = "complete" if _has_trace(workflow_hub) and observe_step is not None and observe_step.complete else ("ready" if _has_trace(workflow_hub) else _entry_status_from_step(observe_step))
+        inspect_artifact_status = "complete" if _has_artifacts(workflow_hub) and observe_step is not None and observe_step.complete else ("ready" if _has_artifacts(workflow_hub) else _entry_status_from_step(observe_step))
+        compare_results_status = "complete" if _has_diff(workflow_hub) and observe_step is not None and observe_step.complete else ("ready" if _has_diff(workflow_hub) else _entry_status_from_step(observe_step))
 
     entries = [
         ProductFlowRunbookEntryView(

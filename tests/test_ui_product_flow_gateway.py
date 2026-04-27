@@ -165,13 +165,15 @@ def test_product_flow_gateway_marks_run_gateway_live_when_execution_is_running()
     assert any(item.gateway_id == "run" and item.live for item in vm.stages)
 
 
-def test_product_flow_gateway_prefers_followthrough_when_completed_run_history_exists() -> None:
+def test_product_flow_gateway_keeps_beginner_completed_run_history_on_run_gateway() -> None:
     vm = read_product_flow_gateway_view_model(_working_save(), execution_record=_run("completed"))
 
     assert vm.source_role == "working_save"
     assert vm.gateway_status in {"actionable", "ready"}
-    assert vm.current_gateway_id in {"followthrough", "run"}
-    assert any(item.gateway_id == "followthrough" and item.boundary_ready for item in vm.stages)
+    assert vm.current_gateway_id == "run"
+    followthrough = next(item for item in vm.stages if item.gateway_id == "followthrough")
+    assert followthrough.boundary_ready is False
+    assert followthrough.required_action_id is None
 
 
 def test_product_flow_gateway_marks_execution_record_as_terminal_review_and_prefers_trace_followthrough() -> None:

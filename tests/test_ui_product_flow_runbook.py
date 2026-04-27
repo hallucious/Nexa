@@ -195,10 +195,12 @@ def test_product_flow_runbook_keeps_beginner_result_reading_on_run_entry_after_c
     artifact_entry = next(entry for entry in vm.entries if entry.entry_id == "inspect_artifacts")
     assert run_entry.entry_status == "complete"
     assert run_entry.enabled is True
-    assert trace_entry.entry_status == "complete"
+    assert trace_entry.entry_status == "inactive"
     assert trace_entry.enabled is False
-    assert artifact_entry.entry_status == "complete"
+    assert trace_entry.complete is False
+    assert artifact_entry.entry_status == "inactive"
     assert artifact_entry.enabled is False
+    assert artifact_entry.complete is False
     assert vm.completed_entry_count >= 4
 
 

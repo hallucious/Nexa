@@ -173,7 +173,9 @@ def test_product_flow_readiness_preserves_completed_followthrough_without_replac
 
     assert vm.current_boundary_id == "commit"
     followthrough = next(boundary for boundary in vm.boundaries if boundary.boundary_id == "followthrough")
-    assert followthrough.complete is True
+    assert followthrough.complete is False
+    assert followthrough.ready is True
+    assert followthrough.action_id == "run_current"
     assert vm.terminal_ready is False
     assert vm.readiness_status == "ready"
 
