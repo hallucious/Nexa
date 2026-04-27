@@ -53,7 +53,14 @@ def _working_save(*, source_commit_id: str | None = None, beginner: bool = False
             last_run=last_run,
             errors=[],
         ),
-        ui=UIModel(layout={}, metadata=({"app_language": "en-US"} if beginner else {})),
+        ui=UIModel(
+            layout={},
+            metadata=(
+                {"app_language": "en-US"}
+                if beginner
+                else ({"beginner_first_success_achieved": True} if completed_last_run else {})
+            ),
+        ),
         designer=DesignerDraftModel(data={"pending": True}),
     )
 
@@ -295,7 +302,7 @@ def test_read_storage_view_model_uses_app_language_from_working_save_ui_metadata
         resources=working_save.resources,
         state=working_save.state,
         runtime=working_save.runtime,
-        ui=UIModel(layout={}, metadata={"app_language": "ko-KR"}),
+        ui=UIModel(layout={}, metadata={"app_language": "ko-KR", "beginner_first_success_achieved": True}),
         designer=working_save.designer,
     )
 
@@ -352,6 +359,18 @@ def test_read_storage_view_model_hides_advanced_beginner_storage_actions_for_com
     labels = {action.action_type: action.label for action in vm.available_actions}
     action_ids = {action.action_type for action in vm.available_actions}
 
-    assert labels["open_latest_commit"] == "Open saved version"
+    assert "open_latest_commit" not in action_ids
     assert labels["run_from_commit"] == "Run saved workflow"
     assert "select_rollback_target" not in action_ids
+
+
+def test_read_storage_view_model_unlocks_commit_history_actions_after_explicit_first_success() -> None:
+    working_save = _working_save(beginner=True, completed_last_run=False)
+    working_save.ui.metadata["beginner_first_success_achieved"] = True
+
+    vm = read_storage_view_model(_commit(), latest_working_save=working_save, latest_execution_record=None)
+
+    action_ids = {action.action_type for action in vm.available_actions}
+
+    assert "open_latest_commit" in action_ids
+    assert "select_rollback_target" in action_ids

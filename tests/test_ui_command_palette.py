@@ -63,8 +63,11 @@ def _approval() -> DesignerApprovalFlowState:
 
 
 def test_command_palette_combines_jump_and_action_entries() -> None:
+    working_save = _working_save()
+    working_save.ui.metadata["beginner_first_success_achieved"] = True
+
     vm = read_command_palette_view_model(
-        _working_save(),
+        working_save,
         validation_report=_validation_report(),
         execution_record=_run(),
         preview_overlay=GraphPreviewOverlay(overlay_id="preview-001", preview_ref="preview:001", summary="preview"),

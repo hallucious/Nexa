@@ -9,7 +9,7 @@ from src.storage.models.working_save_model import RuntimeModel, UIModel, Working
 from src.ui.action_schema import read_builder_action_schema
 from src.ui.designer_panel import read_designer_panel_view_model
 from src.ui.execution_panel import read_execution_panel_view_model
-from src.ui.i18n import beginner_ui_text, normalize_ui_language, ui_text
+from src.ui.i18n import beginner_advanced_surfaces_unlocked, beginner_language_enabled, beginner_ui_text, normalize_ui_language, ui_text
 from src.ui.storage_panel import read_storage_view_model
 from src.ui.validation_panel import read_validation_panel_view_model
 
@@ -76,6 +76,7 @@ def test_ui_i18n_localizes_designer_panel_strings_from_working_save_preference()
 
 def test_ui_i18n_localizes_storage_execution_validation_and_builder_actions() -> None:
     working_save = _working_save("ko")
+    working_save.ui.metadata["beginner_first_success_achieved"] = True
     storage_vm = read_storage_view_model(working_save, latest_commit_snapshot=_commit(), latest_execution_record=_run())
     validation_vm = read_validation_panel_view_model(working_save, validation_report=ValidationReport(role="working_save", findings=[], blocking_count=0, warning_count=0, result="passed"))
     execution_vm = read_execution_panel_view_model(working_save)
@@ -106,3 +107,16 @@ def test_ui_i18n_resolves_beginner_specific_terms_before_first_success() -> None
 
     assert beginner_ui_text("palette.placeholder", beginner_text_key="palette.placeholder.beginner", sources=(working,), app_language="ko") == "단계, 문제, 실행, 액션 검색"
     assert beginner_ui_text("storage.role.working_save", beginner_text_key="storage.role.beginner.working_save", sources=(working,), app_language="ko") == "저장되지 않음"
+
+
+def test_beginner_first_success_requires_explicit_metadata_not_completed_execution() -> None:
+    working = _working_save("ko")
+    completed_run = _run("completed")
+
+    assert beginner_language_enabled(working, completed_run) is True
+    assert beginner_advanced_surfaces_unlocked(working, completed_run) is False
+
+    working.ui.metadata["beginner_first_success_achieved"] = True
+
+    assert beginner_language_enabled(working, completed_run) is False
+    assert beginner_advanced_surfaces_unlocked(working, completed_run) is True

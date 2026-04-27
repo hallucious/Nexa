@@ -153,8 +153,11 @@ def _approval(final_outcome: str = "approved_for_commit") -> DesignerApprovalFlo
 
 
 def test_proposal_commit_workflow_becomes_commit_ready_for_approved_designer_state() -> None:
+    working_save = _working_save()
+    working_save.ui.metadata["beginner_first_success_achieved"] = True
+
     vm = read_proposal_commit_workflow_view_model(
-        _working_save(),
+        working_save,
         selected_ref="node:n1",
         validation_report=_validation_report(),
         execution_record=_run(),
@@ -229,9 +232,12 @@ def test_proposal_commit_workflow_exposes_beginner_confirmation_summary_before_f
     assert vm.beginner_confirmation.secondary_action_label == "Revise"
 
 
-def test_proposal_commit_workflow_disables_beginner_confirmation_after_first_success() -> None:
+def test_proposal_commit_workflow_disables_beginner_confirmation_after_explicit_first_success() -> None:
+    working_save = _working_save()
+    working_save.ui.metadata["beginner_first_success_achieved"] = True
+
     vm = read_proposal_commit_workflow_view_model(
-        _working_save(),
+        working_save,
         selected_ref="node:n1",
         validation_report=_validation_report(),
         execution_record=_run(),
@@ -246,6 +252,25 @@ def test_proposal_commit_workflow_disables_beginner_confirmation_after_first_suc
     assert vm.beginner_mode is False
     assert vm.hide_internal_governance_by_default is False
     assert vm.beginner_confirmation.visible is False
+
+
+def test_proposal_commit_workflow_keeps_beginner_confirmation_for_completed_execution_without_explicit_first_success() -> None:
+    vm = read_proposal_commit_workflow_view_model(
+        _working_save(),
+        selected_ref="node:n1",
+        validation_report=_validation_report(),
+        execution_record=_run(),
+        session_state_card=_session_card(),
+        intent=_intent(),
+        patch_plan=_patch(),
+        precheck=_precheck(),
+        preview=_preview(),
+        approval_flow=_approval(),
+    )
+
+    assert vm.beginner_mode is True
+    assert vm.hide_internal_governance_by_default is True
+    assert vm.beginner_confirmation.visible is True
 
 
 def test_proposal_commit_workflow_uses_beginner_review_label_before_first_success() -> None:

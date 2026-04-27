@@ -103,7 +103,9 @@ def test_read_validation_panel_view_model_projects_execution_guard() -> None:
 
 
 def test_validation_panel_projects_execution_guard_as_history_review_actions() -> None:
-    vm = read_validation_panel_view_model(_working_save(), execution_record=_execution_record())
+    working_save = _working_save()
+    working_save.ui.metadata["beginner_first_success_achieved"] = True
+    vm = read_validation_panel_view_model(working_save, execution_record=_execution_record())
 
     assert vm.source_mode == "execution_guard"
     assert vm.summary.can_commit is False
@@ -174,3 +176,13 @@ def test_validation_panel_surfaces_policy_validation_warning_from_execution_reco
     policy_warning = next(finding for finding in vm.warning_findings if finding.code == "zero_total_weight")
     assert policy_warning.title == "Policy validation"
     assert "Safe defaults were applied" in policy_warning.message
+
+
+def test_validation_panel_hides_execution_deep_actions_before_explicit_first_success() -> None:
+    vm = read_validation_panel_view_model(_working_save(), execution_record=_execution_record())
+
+    action_ids = [action.action_type for action in vm.suggested_actions]
+
+    assert "focus_top_issue" in action_ids
+    assert "open_trace" not in action_ids
+    assert "open_artifacts" not in action_ids

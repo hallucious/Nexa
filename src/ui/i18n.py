@@ -2933,16 +2933,9 @@ def _beginner_metadata_from_source(source: Any) -> Mapping[str, Any]:
 def _beginner_first_success_achieved(*sources: Any) -> bool:
     for source in sources:
         source = _unwrap_beginner_source(source)
-        if isinstance(source, ExecutionRecordModel) and source.meta.status == 'completed':
-            return True
         metadata = _beginner_metadata_from_source(source)
         if bool(metadata.get('beginner_first_success_achieved')):
             return True
-        if isinstance(source, WorkingSaveModel):
-            last_run = getattr(source.runtime, 'last_run', None) or {}
-            status = str(last_run.get('status') or last_run.get('semantic_status') or '').lower()
-            if status == 'completed':
-                return True
     return False
 
 

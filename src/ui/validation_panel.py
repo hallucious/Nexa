@@ -12,6 +12,10 @@ from src.storage.models.working_save_model import WorkingSaveModel
 from src.contracts.status_taxonomy import lookup_reason_code_record
 from src.contracts.policy_result_contract import ExplainabilityResult, PolicyDecision
 from src.policy.policy_explainability import build_explainability
+from src.ui.beginner_surface_gate import (
+    BEGINNER_LOCKED_DEEP_SURFACE_ACTION_IDS,
+    beginner_deep_surface_gate_active,
+)
 from src.ui.i18n import beginner_language_enabled, ui_language_from_sources, ui_text
 from src.ui.friendly_error_messages import FriendlyErrorView, friendly_error_from_candidates
 
@@ -795,6 +799,12 @@ def read_validation_panel_view_model(
                 None if overall_status in {"pass", "pass_with_warnings"} and not blocking_findings else ui_text("validation.reason.blocking_issues_remain", app_language=app_language),
             ),
         ]
+    if beginner_deep_surface_gate_active(source, execution_record):
+        suggested_actions = [
+            action for action in suggested_actions
+            if action.action_type not in BEGINNER_LOCKED_DEEP_SURFACE_ACTION_IDS
+        ]
+
     return ValidationPanelViewModel(
         source_mode=source_mode,
         storage_role=storage_role,

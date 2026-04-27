@@ -7,6 +7,11 @@ from src.storage.models.commit_snapshot_model import CommitSnapshotModel
 from src.storage.models.execution_record_model import ExecutionRecordModel
 from src.storage.models.loaded_nex_artifact import LoadedNexArtifact
 from src.storage.models.working_save_model import WorkingSaveModel
+from src.ui.beginner_surface_gate import (
+    BEGINNER_LOCKED_DEEP_SURFACE_ACTION_IDS,
+    BEGINNER_LOCKED_DEEP_SURFACE_REASON,
+    beginner_deep_surface_gate_active,
+)
 from src.ui.i18n import beginner_language_enabled, ui_language_from_sources, ui_text
 
 StorageRole = str
@@ -529,6 +534,7 @@ def _available_actions(
     recent_entries: StorageRecentEntriesView,
     app_language: str,
     beginner_mode: bool = False,
+    beginner_gate_active: bool = False,
 ) -> list[StorageActionHint]:
     actions: list[StorageActionHint] = []
     if working_save is not None:
@@ -599,7 +605,9 @@ def _available_actions(
         can_compare_runs = len(recent_entries.recent_run_refs) >= 2
         actions.append(StorageActionHint("compare_runs", ui_text("storage.action.compare_runs", app_language=app_language), can_compare_runs, None if can_compare_runs else ui_text("storage.reason.second_execution_required", app_language=app_language), target_ref=_run_ref(execution_record)))
     if beginner_mode:
-        hidden_actions = {"compare_draft_to_commit", "select_rollback_target", "compare_runs", "open_trace", "open_artifacts"}
+        hidden_actions = {"compare_draft_to_commit"}
+        if beginner_gate_active:
+            hidden_actions.update(BEGINNER_LOCKED_DEEP_SURFACE_ACTION_IDS)
         actions = [action for action in actions if action.action_type not in hidden_actions]
     return actions
 
@@ -684,6 +692,7 @@ def read_storage_view_model(
             recent_entries=recent_entries,
             app_language=app_language,
             beginner_mode=beginner_mode,
+            beginner_gate_active=beginner_deep_surface_gate_active(active_source, latest_working_save, latest_execution_record),
         ),
         diagnostics=diagnostics,
         explanation=explanation,
