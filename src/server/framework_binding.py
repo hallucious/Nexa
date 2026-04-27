@@ -2153,6 +2153,7 @@ class FrameworkRouteBindings:
         provider_binding_rows: Sequence[Mapping[str, Any]] = (),
         managed_secret_rows: Sequence[Mapping[str, Any]] = (),
         provider_probe_rows: Sequence[Mapping[str, Any]] = (),
+        provider_model_catalog_rows: Sequence[Mapping[str, Any]] = (),
         onboarding_rows: Sequence[Mapping[str, Any]] = (),
         run_record_writer=None,
     ) -> FrameworkOutboundResponse:
@@ -2170,6 +2171,7 @@ class FrameworkRouteBindings:
             provider_binding_rows=provider_binding_rows,
             managed_secret_rows=managed_secret_rows,
             provider_probe_rows=provider_probe_rows,
+            provider_model_catalog_rows=provider_model_catalog_rows,
             onboarding_rows=onboarding_rows,
             run_record_writer=run_record_writer,
         )

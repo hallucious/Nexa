@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import asdict, is_dataclass
 import json
-from typing import Any, Callable, Mapping, Optional
+from typing import Any, Callable, Mapping, Optional, Sequence
 
 from src.server.auth_adapter import AuthorizationGate, RequestAuthResolver
 from src.server.auth_models import AuthorizationInput, RunAuthorizationContext, WorkspaceAuthorizationContext
@@ -5355,6 +5355,7 @@ class RunHttpRouteSurface:
         provider_binding_rows: list[Mapping[str, Any]] | tuple[Mapping[str, Any], ...] = (),
         managed_secret_rows: list[Mapping[str, Any]] | tuple[Mapping[str, Any], ...] = (),
         provider_probe_rows: list[Mapping[str, Any]] | tuple[Mapping[str, Any], ...] = (),
+        provider_model_catalog_rows: Sequence[Mapping[str, Any]] = (),
         onboarding_rows: list[Mapping[str, Any]] | tuple[Mapping[str, Any], ...] = (),
         run_record_writer=None,
     ) -> HttpRouteResponse:
@@ -5390,6 +5391,7 @@ class RunHttpRouteSurface:
             provider_binding_rows=provider_binding_rows,
             managed_secret_rows=managed_secret_rows,
             provider_probe_rows=provider_probe_rows,
+            provider_model_catalog_rows=provider_model_catalog_rows,
             onboarding_rows=onboarding_rows,
         )
         if outcome.accepted:

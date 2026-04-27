@@ -7,6 +7,7 @@ from uuid import uuid4
 
 from src.server.adapters import EngineLaunchAdapter
 from src.server.provider_setup_readiness import evaluate_required_provider_setup
+from src.server.provider_catalog_runtime import evaluate_provider_model_access_for_artifact
 from src.server.auth_adapter import AuthorizationGate, build_engine_auth_context_refs
 from src.server.auth_models import AuthorizationInput, RequestAuthContext, WorkspaceAuthorizationContext
 from src.server.boundary_models import EngineRunLaunchRequest, EngineRunLaunchResponse
@@ -239,6 +240,7 @@ class RunAdmissionService:
         provider_binding_rows: Sequence[Mapping[str, Any]] = (),
         managed_secret_rows: Sequence[Mapping[str, Any]] = (),
         provider_probe_rows: Sequence[Mapping[str, Any]] = (),
+        provider_model_catalog_rows: Sequence[Mapping[str, Any]] | None = None,
         onboarding_rows: Sequence[Mapping[str, Any]] = (),
     ) -> RunAdmissionOutcome:
         workspace_title, provider_continuity, activity_continuity = _continuity_projection_for_workspace(
@@ -340,6 +342,25 @@ class RunAdmissionService:
                 activity_continuity=activity_continuity,
                 blocking_findings=tuple(item.to_payload() for item in provider_setup.blocking_findings),
             )
+
+        if policy.enforce_provider_catalog_access:
+            access_decisions = evaluate_provider_model_access_for_artifact(
+                source_payload=resolved_target.source_payload,
+                plan_key=policy.plan_key,
+                catalog_rows=provider_model_catalog_rows,
+            )
+            blocking_decisions = tuple(decision for decision in access_decisions if not decision.allowed)
+            if blocking_decisions:
+                primary_decision = blocking_decisions[0]
+                return cls._reject(
+                    workspace_id=request.workspace_id,
+                    reason_code=primary_decision.reason_code,
+                    message=primary_decision.message,
+                    workspace_title=workspace_title,
+                    provider_continuity=provider_continuity,
+                    activity_continuity=activity_continuity,
+                    blocking_findings=tuple(decision.to_payload() for decision in blocking_decisions),
+                )
 
         run_request_id_factory = run_request_id_factory or (lambda: f"req_{uuid4().hex}")
         run_id_factory = run_id_factory or (lambda: f"run_{uuid4().hex}")

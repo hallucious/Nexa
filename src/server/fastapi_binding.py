@@ -2971,6 +2971,7 @@ class FastApiRouteBindings:
                 provider_binding_rows=self.dependencies.workspace_provider_binding_rows_provider(workspace_id),
                 managed_secret_rows=self.dependencies.recent_managed_secret_rows_provider(),
                 provider_probe_rows=self.dependencies.workspace_provider_probe_rows_provider(workspace_id),
+                provider_model_catalog_rows=self.dependencies.provider_model_catalog_rows_provider(),
                 onboarding_rows=self.dependencies.onboarding_rows_provider(),
             )
             return self._framework_response(outbound)

@@ -10,6 +10,7 @@ from src.server.managed_secret_metadata_store import InMemoryManagedSecretMetada
 from src.server.onboarding_state_store import InMemoryOnboardingStateStore
 from src.server.provider_binding_store import InMemoryProviderBindingStore
 from src.server.provider_secret_api import default_provider_catalog_rows
+from src.server.provider_catalog_runtime import default_provider_model_catalog_rows
 from src.server.provider_probe_history_models import ProviderProbeHistoryRecord
 from src.server.provider_probe_history_store import InMemoryProviderProbeHistoryStore
 from src.server.workspace_registry_store import InMemoryWorkspaceRegistryStore
@@ -726,6 +727,110 @@ class PostgresProviderCatalogStore:
             "default_secret_name_template": str(row.get("default_secret_name_template") or "").strip() or None,
             "lifecycle_state": lifecycle_state,
             "updated_at": updated_at,
+        }
+
+
+@dataclass(frozen=True)
+class PostgresProviderCostCatalogStore:
+    engine: Engine
+
+    def write(self, row: Mapping[str, Any]) -> dict[str, Any]:
+        normalized = self._normalize_row(row)
+        plan_availability = _serialize_json(normalized["plan_availability"])
+        default_for_plans = _serialize_json(normalized.get("default_for_plans") or ())
+        _execute(
+            self.engine,
+            f"""
+            INSERT INTO provider_cost_catalog (
+                provider_model_key,
+                provider_key,
+                provider_family,
+                model_ref,
+                model_display_name,
+                tier,
+                plan_availability,
+                default_for_plans,
+                cost_ratio,
+                pricing_unit,
+                lifecycle_state,
+                updated_at
+            ) VALUES (
+                :provider_model_key,
+                :provider_key,
+                :provider_family,
+                :model_ref,
+                :model_display_name,
+                :tier,
+                {_json_placeholder(self.engine, 'plan_availability')},
+                {_json_placeholder(self.engine, 'default_for_plans')},
+                :cost_ratio,
+                :pricing_unit,
+                :lifecycle_state,
+                :updated_at
+            )
+            ON CONFLICT (provider_model_key) DO UPDATE SET
+                provider_key = EXCLUDED.provider_key,
+                provider_family = EXCLUDED.provider_family,
+                model_ref = EXCLUDED.model_ref,
+                model_display_name = EXCLUDED.model_display_name,
+                tier = EXCLUDED.tier,
+                plan_availability = EXCLUDED.plan_availability,
+                default_for_plans = EXCLUDED.default_for_plans,
+                cost_ratio = EXCLUDED.cost_ratio,
+                pricing_unit = EXCLUDED.pricing_unit,
+                lifecycle_state = EXCLUDED.lifecycle_state,
+                updated_at = EXCLUDED.updated_at
+            """,
+            {
+                **normalized,
+                "plan_availability": plan_availability,
+                "default_for_plans": default_for_plans,
+            },
+        )
+        return dict(normalized)
+
+    def seed_defaults(self, rows: Sequence[Mapping[str, Any]] | None = None) -> tuple[dict[str, Any], ...]:
+        seeded = rows if rows is not None else default_provider_model_catalog_rows()
+        return tuple(self.write(row) for row in seeded)
+
+    def list_rows(self) -> tuple[dict[str, Any], ...]:
+        rows = _fetch_all(
+            self.engine,
+            """
+            SELECT provider_model_key, provider_key, provider_family, model_ref,
+                   model_display_name, tier, plan_availability, default_for_plans,
+                   cost_ratio, pricing_unit, lifecycle_state, updated_at
+            FROM provider_cost_catalog
+            WHERE lifecycle_state != 'archived'
+            ORDER BY provider_key ASC, model_ref ASC
+            """,
+        )
+        return tuple(self._normalize_row(row) for row in rows)
+
+    @staticmethod
+    def _normalize_row(row: Mapping[str, Any]) -> dict[str, Any]:
+        provider_key = str(row.get("provider_key") or "").strip().lower()
+        model_ref = str(row.get("model_ref") or "").strip().lower()
+        provider_model_key = str(row.get("provider_model_key") or f"{provider_key}:{model_ref}").strip().lower()
+        if not provider_key:
+            raise ValueError("provider_cost_catalog_store.provider_key_required")
+        if not model_ref:
+            raise ValueError("provider_cost_catalog_store.model_ref_required")
+        if not provider_model_key:
+            raise ValueError("provider_cost_catalog_store.provider_model_key_required")
+        return {
+            "provider_model_key": provider_model_key,
+            "provider_key": provider_key,
+            "provider_family": str(row.get("provider_family") or provider_key).strip() or provider_key,
+            "model_ref": model_ref,
+            "model_display_name": str(row.get("model_display_name") or model_ref).strip() or model_ref,
+            "tier": str(row.get("tier") or "economy").strip() or "economy",
+            "plan_availability": tuple(str(item).strip().lower() for item in _decode_json(row.get("plan_availability"), default=row.get("plan_availability") or ()) if str(item).strip()),
+            "default_for_plans": tuple(str(item).strip().lower() for item in _decode_json(row.get("default_for_plans"), default=row.get("default_for_plans") or ()) if str(item).strip()),
+            "cost_ratio": float(row.get("cost_ratio") or 1.0),
+            "pricing_unit": str(row.get("pricing_unit") or "relative_unit").strip() or "relative_unit",
+            "lifecycle_state": str(row.get("lifecycle_state") or "active").strip() or "active",
+            "updated_at": str(row.get("updated_at") or "").strip() or None,
         }
 
 

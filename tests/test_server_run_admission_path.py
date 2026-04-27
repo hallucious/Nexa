@@ -428,3 +428,110 @@ def test_run_admission_ignores_stale_failed_provider_probe_after_binding_refresh
     assert outcome.accepted is True
     assert outcome.accepted_response is not None
     assert outcome.accepted_response.run_id == "run-provider-ready-001"
+
+
+
+def test_run_admission_enforces_provider_model_plan_access_when_enabled() -> None:
+    import copy
+
+    from src.server.provider_catalog_runtime import default_provider_model_catalog_rows
+
+    source = copy.deepcopy(_provider_backed_commit_snapshot("snap-provider-plan-001"))
+    source["circuit"]["nodes"][0]["execution"]["provider"]["model"] = "gpt-4o"
+    request = ProductRunLaunchRequest(
+        workspace_id="ws-001",
+        execution_target=ProductExecutionTarget(target_type="approved_snapshot", target_ref="snap-provider-plan-001"),
+    )
+
+    outcome = RunAdmissionService.admit(
+        request=request,
+        request_auth=_auth_context(),
+        workspace_context=_workspace(),
+        target_catalog={
+            "snap-provider-plan-001": ExecutionTargetCatalogEntry(
+                workspace_id="ws-001",
+                target_ref="snap-provider-plan-001",
+                target_type="approved_snapshot",
+                source=source,
+            )
+        },
+        policy=ProductAdmissionPolicy(enforce_provider_catalog_access=True, plan_key="free"),
+        provider_binding_rows=(
+            {
+                "workspace_id": "ws-001",
+                "provider_key": "openai",
+                "display_name": "OpenAI GPT",
+                "credential_source": "managed",
+                "secret_ref": "secret://ws-001/openai",
+                "enabled": True,
+                "updated_at": "2026-04-11T12:10:00+00:00",
+            },
+        ),
+        managed_secret_rows=(
+            {
+                "workspace_id": "ws-001",
+                "provider_key": "openai",
+                "secret_ref": "secret://ws-001/openai",
+                "last_rotated_at": "2026-04-11T12:10:00+00:00",
+            },
+        ),
+        provider_model_catalog_rows=default_provider_model_catalog_rows(),
+    )
+
+    assert outcome.accepted is False
+    assert outcome.rejected_response is not None
+    assert outcome.rejected_response.reason_code == "provider_model_access.plan_not_allowed"
+    assert outcome.rejected_response.blocking_findings[0]["selected_model_ref"] == "gpt-4o"
+
+
+def test_run_admission_allows_provider_model_plan_access_for_pro_when_enabled() -> None:
+    import copy
+
+    from src.server.provider_catalog_runtime import default_provider_model_catalog_rows
+
+    source = copy.deepcopy(_provider_backed_commit_snapshot("snap-provider-plan-pro-001"))
+    source["circuit"]["nodes"][0]["execution"]["provider"]["model"] = "gpt-4o"
+    request = ProductRunLaunchRequest(
+        workspace_id="ws-001",
+        execution_target=ProductExecutionTarget(target_type="approved_snapshot", target_ref="snap-provider-plan-pro-001"),
+    )
+
+    outcome = RunAdmissionService.admit(
+        request=request,
+        request_auth=_auth_context(),
+        workspace_context=_workspace(),
+        target_catalog={
+            "snap-provider-plan-pro-001": ExecutionTargetCatalogEntry(
+                workspace_id="ws-001",
+                target_ref="snap-provider-plan-pro-001",
+                target_type="approved_snapshot",
+                source=source,
+            )
+        },
+        policy=ProductAdmissionPolicy(enforce_provider_catalog_access=True, plan_key="pro"),
+        provider_binding_rows=(
+            {
+                "workspace_id": "ws-001",
+                "provider_key": "openai",
+                "display_name": "OpenAI GPT",
+                "credential_source": "managed",
+                "secret_ref": "secret://ws-001/openai",
+                "enabled": True,
+                "updated_at": "2026-04-11T12:10:00+00:00",
+            },
+        ),
+        managed_secret_rows=(
+            {
+                "workspace_id": "ws-001",
+                "provider_key": "openai",
+                "secret_ref": "secret://ws-001/openai",
+                "last_rotated_at": "2026-04-11T12:10:00+00:00",
+            },
+        ),
+        provider_model_catalog_rows=default_provider_model_catalog_rows(),
+        run_id_factory=lambda: "run-provider-model-pro-001",
+    )
+
+    assert outcome.accepted is True
+    assert outcome.accepted_response is not None
+    assert outcome.accepted_response.run_id == "run-provider-model-pro-001"

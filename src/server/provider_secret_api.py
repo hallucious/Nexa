@@ -6,6 +6,7 @@ from typing import Any, Callable, Optional
 
 from src.server.auth_adapter import AuthorizationGate
 from src.server.auth_models import AuthorizationInput, RequestAuthContext, WorkspaceAuthorizationContext
+from src.server.provider_catalog_runtime import provider_catalog_rows_from_model_catalog
 from src.server.provider_secret_models import (
     ProviderBindingListOutcome,
     ProviderBindingWriteOutcome,
@@ -25,57 +26,8 @@ from src.server.workspace_onboarding_api import _activity_continuity_summary_for
 
 SecretWriter = Callable[[str, str, str, Mapping[str, Any]], Mapping[str, Any]]
 
-_DEFAULT_PROVIDER_CATALOG_ROWS: tuple[dict[str, Any], ...] = (
-    {
-        "provider_key": "openai",
-        "provider_family": "openai",
-        "display_name": "OpenAI GPT",
-        "managed_supported": True,
-        "recommended_scope": "workspace",
-        "local_env_var_hint": "OPENAI_API_KEY",
-        "default_secret_name_template": "nexa/{workspace_id}/providers/openai",
-    },
-    {
-        "provider_key": "anthropic",
-        "provider_family": "anthropic",
-        "display_name": "Anthropic Claude",
-        "managed_supported": True,
-        "recommended_scope": "workspace",
-        "local_env_var_hint": "ANTHROPIC_API_KEY",
-        "default_secret_name_template": "nexa/{workspace_id}/providers/anthropic",
-    },
-    {
-        "provider_key": "gemini",
-        "provider_family": "google",
-        "display_name": "Google Gemini",
-        "managed_supported": True,
-        "recommended_scope": "workspace",
-        "local_env_var_hint": "GEMINI_API_KEY",
-        "default_secret_name_template": "nexa/{workspace_id}/providers/gemini",
-    },
-    {
-        "provider_key": "perplexity",
-        "provider_family": "perplexity",
-        "display_name": "Perplexity",
-        "managed_supported": True,
-        "recommended_scope": "workspace",
-        "local_env_var_hint": "PPLX_API_KEY",
-        "default_secret_name_template": "nexa/{workspace_id}/providers/perplexity",
-    },
-    {
-        "provider_key": "codex",
-        "provider_family": "openai",
-        "display_name": "OpenAI Codex",
-        "managed_supported": True,
-        "recommended_scope": "workspace",
-        "local_env_var_hint": "OPENAI_API_KEY",
-        "default_secret_name_template": "nexa/{workspace_id}/providers/codex",
-    },
-)
-
-
 def default_provider_catalog_rows() -> tuple[dict[str, Any], ...]:
-    return tuple(dict(row) for row in _DEFAULT_PROVIDER_CATALOG_ROWS)
+    return provider_catalog_rows_from_model_catalog()
 
 
 def _as_mapping(value: Any) -> Mapping[str, Any]:
@@ -148,6 +100,9 @@ class ProviderSecretIntegrationService:
                 recommended_scope=str(row.get("recommended_scope") or "workspace").strip() or "workspace",
                 local_env_var_hint=str(row.get("local_env_var_hint") or "").strip() or None,
                 default_secret_name_template=str(row.get("default_secret_name_template") or "").strip() or None,
+                default_model_ref=str(row.get("default_model_ref") or "").strip() or None,
+                allowed_model_refs=tuple(str(item).strip() for item in (row.get("allowed_model_refs") or ()) if str(item).strip()),
+                lifecycle_state=str(row.get("lifecycle_state") or "active").strip() or "active",
             )
             for row in _provider_catalog_rows(provider_catalog_rows)
         )

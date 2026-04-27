@@ -31,6 +31,9 @@ class ProductProviderCatalogEntryView:
     recommended_scope: str = "workspace"
     local_env_var_hint: Optional[str] = None
     default_secret_name_template: Optional[str] = None
+    default_model_ref: Optional[str] = None
+    allowed_model_refs: tuple[str, ...] = ()
+    lifecycle_state: str = "active"
 
     def __post_init__(self) -> None:
         if not self.provider_key:
@@ -41,6 +44,13 @@ class ProductProviderCatalogEntryView:
             raise ValueError("ProductProviderCatalogEntryView.display_name must be non-empty")
         if self.recommended_scope not in _ALLOWED_SCOPES:
             raise ValueError(f"Unsupported ProductProviderCatalogEntryView.recommended_scope: {self.recommended_scope}")
+        if self.default_model_ref is not None and not str(self.default_model_ref).strip():
+            raise ValueError("ProductProviderCatalogEntryView.default_model_ref must be non-empty when provided")
+        for model_ref in self.allowed_model_refs:
+            if not str(model_ref).strip():
+                raise ValueError("ProductProviderCatalogEntryView.allowed_model_refs entries must be non-empty")
+        if not str(self.lifecycle_state or "").strip():
+            raise ValueError("ProductProviderCatalogEntryView.lifecycle_state must be non-empty")
 
 
 @dataclass(frozen=True)

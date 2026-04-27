@@ -46,6 +46,7 @@ RecentRunRowsProvider = Callable[[], Sequence[Mapping[str, Any]]]
 OnboardingRowsProvider = Callable[[], Sequence[Mapping[str, Any]]]
 FeedbackRowsProvider = Callable[[], Sequence[Mapping[str, Any]]]
 ProviderCatalogRowsProvider = Callable[[], Sequence[Mapping[str, Any]]]
+ProviderModelCatalogRowsProvider = Callable[[], Sequence[Mapping[str, Any]]]
 WorkspaceProviderBindingRowsProvider = Callable[[str], Sequence[Mapping[str, Any]]]
 WorkspaceProviderBindingRowProvider = Callable[[str, str], Optional[Mapping[str, Any]]]
 WorkspaceProviderProbeRowsProvider = Callable[[str], Sequence[Mapping[str, Any]]]
@@ -222,6 +223,7 @@ class FastApiRouteDependencies:
     onboarding_rows_provider: OnboardingRowsProvider = _empty_noarg_rows
     feedback_rows_provider: FeedbackRowsProvider = _empty_noarg_rows
     provider_catalog_rows_provider: ProviderCatalogRowsProvider = _empty_noarg_rows
+    provider_model_catalog_rows_provider: ProviderModelCatalogRowsProvider = _empty_noarg_rows
     workspace_provider_binding_rows_provider: WorkspaceProviderBindingRowsProvider = _empty_provider_binding_rows
     workspace_provider_binding_row_provider: WorkspaceProviderBindingRowProvider = _none_provider_binding_row
     workspace_provider_probe_rows_provider: WorkspaceProviderProbeRowsProvider = _empty_provider_binding_rows

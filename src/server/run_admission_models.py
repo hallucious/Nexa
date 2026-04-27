@@ -95,6 +95,14 @@ class ProductAdmissionPolicy:
     workspace_launch_enabled: bool = True
     workspace_suspended: bool = False
     quota_available: bool = True
+    plan_key: str = "free"
+    enforce_provider_catalog_access: bool = False
+
+    def __post_init__(self) -> None:
+        normalized_plan = str(self.plan_key or "free").strip().lower()
+        if normalized_plan not in {"free", "pro", "team"}:
+            raise ValueError(f"Unsupported ProductAdmissionPolicy.plan_key: {self.plan_key}")
+        object.__setattr__(self, "plan_key", normalized_plan)
 
 
 @dataclass(frozen=True)

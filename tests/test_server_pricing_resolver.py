@@ -43,3 +43,22 @@ def test_unknown_provider_returns_none() -> None:
         workspace_override={},
     )
     assert resolver.resolve("unknown") is None
+
+
+
+def test_canonical_catalog_model_cost_is_available_when_supplied() -> None:
+    from src.server.provider_catalog_runtime import default_provider_model_catalog_rows
+
+    resolver = PricingResolver(
+        external_table={},
+        cache=PricingCache(),
+        canonical_catalog_rows=default_provider_model_catalog_rows(),
+    )
+
+    cost = resolver.resolve("openai", "gpt-4o")
+
+    assert cost is not None
+    assert cost.source == "canonical_catalog"
+    assert cost.provider == "openai"
+    assert cost.model_ref == "gpt-4o"
+    assert cost.cost_ratio == 3.0

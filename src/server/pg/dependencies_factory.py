@@ -3,6 +3,9 @@ from __future__ import annotations
 from dataclasses import replace
 from typing import Any
 
+from sqlalchemy import inspect
+from sqlalchemy.exc import SQLAlchemyError
+
 from src.server.fastapi_binding_models import FastApiRouteDependencies
 from src.server.provider_secret_api import default_provider_catalog_rows
 from src.server.run_admission_models import ExecutionTargetCatalogEntry
@@ -20,6 +23,7 @@ from src.server.pg.row_stores import (
     PostgresOnboardingStateStore,
     PostgresProviderBindingStore,
     PostgresProviderCatalogStore,
+    PostgresProviderCostCatalogStore,
     PostgresProviderProbeHistoryStore,
     PostgresPublicShareActionReportStore,
     PostgresPublicSharePayloadStore,
@@ -29,6 +33,13 @@ from src.server.pg.row_stores import (
 from src.server.provider_binding_store import bind_provider_binding_store
 from src.server.provider_probe_history_store import bind_probe_history_store
 from src.server.workspace_registry_store import bind_workspace_registry_store
+
+
+def _table_exists(engine: Any, table_name: str) -> bool:
+    try:
+        return bool(inspect(engine).has_table(table_name))
+    except SQLAlchemyError:
+        return True
 
 
 # ``async_engine`` is intentionally typed as ``Any`` here so importing this module does
@@ -49,6 +60,10 @@ def build_postgres_dependencies(async_engine: Any, *, sync_engine: Any | None = 
     workspace_artifact_source_store = PostgresWorkspaceArtifactSourceStore(resolved_sync_engine)
     provider_catalog_store = PostgresProviderCatalogStore(resolved_sync_engine)
     provider_catalog_store.seed_defaults(default_provider_catalog_rows())
+    provider_cost_catalog_store = PostgresProviderCostCatalogStore(resolved_sync_engine)
+    provider_cost_catalog_available = _table_exists(resolved_sync_engine, "provider_cost_catalog")
+    if provider_cost_catalog_available:
+        provider_cost_catalog_store.seed_defaults()
     public_share_payload_store = PostgresPublicSharePayloadStore(resolved_sync_engine)
     public_share_action_report_store = PostgresPublicShareActionReportStore(resolved_sync_engine)
     saved_public_share_store = PostgresSavedPublicShareStore(resolved_sync_engine)
@@ -99,6 +114,7 @@ def build_postgres_dependencies(async_engine: Any, *, sync_engine: Any | None = 
         dependencies,
         target_catalog_provider=_target_catalog_provider,
         provider_catalog_rows_provider=provider_catalog_store.list_rows,
+        provider_model_catalog_rows_provider=provider_cost_catalog_store.list_rows if provider_cost_catalog_available else (lambda: ()),
         workspace_artifact_source_provider=workspace_artifact_source_store.get,
         workspace_artifact_source_writer=workspace_artifact_source_store.write,
         run_context_provider=run_projection_store.get_run_context,
