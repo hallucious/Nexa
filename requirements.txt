@@ -12,3 +12,5 @@ psycopg[binary]>=3.2
 alembic>=1.13
 pyjwt[crypto]>=2.8
 uvicorn[standard]>=0.27
+redis>=5.0
+arq>=0.26

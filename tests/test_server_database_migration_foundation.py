@@ -74,10 +74,11 @@ def test_server_schema_families_keep_mutable_and_append_only_concerns_separate()
         "public_share_persistence",
         "workspace_feedback",
         "append_only_outputs",
+        "run_submissions",
     ]
-    assert summary["family_count"] == 9
+    assert summary["family_count"] == 10
 
-    workspace_family, workspace_shell_family, run_family, provider_family, probe_family, catalog_family, public_share_family, feedback_family, append_only_family = families
+    workspace_family, workspace_shell_family, run_family, provider_family, probe_family, catalog_family, public_share_family, feedback_family, append_only_family, run_submissions_family = families
     assert workspace_family.persistence_mode == "mutable_projection"
     assert workspace_shell_family.persistence_mode == "mutable_projection"
     assert run_family.persistence_mode == "mutable_projection"
@@ -87,6 +88,7 @@ def test_server_schema_families_keep_mutable_and_append_only_concerns_separate()
     assert public_share_family.persistence_mode == "mutable_projection"
     assert feedback_family.persistence_mode == "mutable_projection"
     assert append_only_family.persistence_mode == "append_only"
+    assert run_submissions_family.persistence_mode == "mutable_projection"
 
     workspace_shell_tables = {table.name for table in workspace_shell_family.tables}
     assert workspace_shell_tables == {"workspace_artifact_sources"}

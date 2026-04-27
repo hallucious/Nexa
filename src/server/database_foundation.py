@@ -531,7 +531,56 @@ def get_server_schema_families() -> tuple[SchemaFamily, ...]:
             ),
         ),
     )
-    return workspace_registry, workspace_shell_sources, run_history, provider_credentials, provider_probe_history, catalog_surfaces, public_share_persistence, workspace_feedback, append_only_outputs
+    run_submissions = SchemaFamily(
+        family_name="run_submissions",
+        purpose=(
+            "Short-lived operational truth table bridging product-accepted run requests and "
+            "queue transport. Category C: TTL-bounded and cleanup-deletable. "
+            "Authoritative source that a run was accepted even if Redis is later lost."
+        ),
+        persistence_mode="mutable_projection",
+        tables=(
+            TableSpec(
+                name="run_submissions",
+                persistence_mode="mutable_projection",
+                columns=(
+                    ColumnSpec("submission_id", "TEXT", is_primary_key=True),
+                    ColumnSpec("run_id", "TEXT NOT NULL"),
+                    ColumnSpec("workspace_id", "TEXT NOT NULL"),
+                    ColumnSpec("run_request_id", "TEXT NOT NULL"),
+                    ColumnSpec("submitter_user_ref", "TEXT NOT NULL"),
+                    ColumnSpec("target_type", "TEXT NOT NULL"),
+                    ColumnSpec("target_ref", "TEXT NOT NULL"),
+                    ColumnSpec("provider_id", "TEXT"),
+                    ColumnSpec("model_id", "TEXT"),
+                    ColumnSpec("priority", "TEXT NOT NULL DEFAULT 'normal'"),
+                    ColumnSpec("mode", "TEXT NOT NULL DEFAULT 'standard'"),
+                    ColumnSpec("submission_status", "TEXT NOT NULL DEFAULT 'submitted'"),
+                    ColumnSpec("queue_name", "TEXT"),
+                    ColumnSpec("queue_job_id", "TEXT"),
+                    ColumnSpec("worker_attempt_number", "INTEGER NOT NULL DEFAULT 0"),
+                    ColumnSpec("submitted_at", "TEXT NOT NULL"),
+                    ColumnSpec("queued_at", "TEXT"),
+                    ColumnSpec("claimed_at", "TEXT"),
+                    ColumnSpec("terminal_at", "TEXT"),
+                    ColumnSpec("expires_at", "TEXT"),
+                    ColumnSpec("failure_reason", "TEXT"),
+                    ColumnSpec("created_at", "TEXT NOT NULL"),
+                    ColumnSpec("updated_at", "TEXT NOT NULL"),
+                ),
+                indexes=(
+                    IndexSpec("idx_run_submissions_run_id", ("run_id",)),
+                    IndexSpec("idx_run_submissions_workspace_id", ("workspace_id",)),
+                    IndexSpec("idx_run_submissions_submission_status", ("submission_status",)),
+                    IndexSpec("idx_run_submissions_submitted_at", ("submitted_at",)),
+                    IndexSpec("idx_run_submissions_expires_at", ("expires_at",)),
+                    IndexSpec("uq_run_submissions_run_request_id", ("run_request_id",), unique=True),
+                ),
+            ),
+        ),
+    )
+
+    return workspace_registry, workspace_shell_sources, run_history, provider_credentials, provider_probe_history, catalog_surfaces, public_share_persistence, workspace_feedback, append_only_outputs, run_submissions
 
 
 def build_server_schema_summary() -> dict[str, object]:
