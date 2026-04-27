@@ -587,7 +587,7 @@ def test_builder_shell_projects_product_readiness_hold_for_return_use() -> None:
         resources=ResourcesModel(prompts={}, providers={}, plugins={}),
         state=StateModel(input={}, working={}, memory={}),
         runtime=RuntimeModel(status="draft", validation_summary={}, last_run={}, errors=[]),
-        ui=UIModel(layout={}, metadata={"beginner_first_success_achieved": True}),
+        ui=UIModel(layout={}, metadata={"beginner_first_success_achieved": True, "provider_setup_env": {"OPENAI_API_KEY": "sk-test"}}),
     )
 
     vm = read_builder_shell_view_model(source)
@@ -631,3 +631,44 @@ def test_builder_shell_does_not_unlock_deep_surfaces_from_completed_execution_al
     assert "diff" not in vm.coordination.visible_panels
     assert "trace_timeline" not in vm.coordination.visible_panels
     assert "artifact" not in vm.coordination.visible_panels
+
+
+
+def test_builder_shell_does_not_mark_product_readiness_stable_from_completed_execution_alone(monkeypatch) -> None:
+    monkeypatch.setenv("OPENAI_API_KEY", "sk-test")
+    source = WorkingSaveModel(
+        meta=WorkingSaveMeta(format_version="1.0.0", storage_role="working_save", working_save_id="ws-beginner-product-readiness", name="Draft"),
+        circuit=CircuitModel(nodes=[{"id": "n1"}], edges=[], entry="n1", outputs=[]),
+        resources=ResourcesModel(prompts={}, providers={}, plugins={}),
+        state=StateModel(input={}, working={}, memory={}),
+        runtime=RuntimeModel(status="draft", validation_summary={}, last_run={}, errors=[]),
+        ui=UIModel(layout={}, metadata={"provider_setup_env": {"OPENAI_API_KEY": "sk-test"}}),
+    )
+
+    vm = read_builder_shell_view_model(source, execution_record=_run())
+
+    assert vm.diagnostics.advanced_surfaces_unlocked is False
+    assert vm.product_readiness.review_state == "hold_first_success_run"
+    assert vm.product_readiness.next_bottleneck_stage == "first_success_run"
+    assert vm.product_readiness.stages[1].stage_state == "complete"
+    assert vm.product_readiness.stages[1].recommended_action_id == "open_runtime_monitoring"
+    assert vm.product_readiness.stages[2].stage_state == "inactive"
+
+
+def test_builder_shell_records_product_readiness_complete_after_explicit_first_success(monkeypatch) -> None:
+    monkeypatch.setenv("OPENAI_API_KEY", "sk-test")
+    source = WorkingSaveModel(
+        meta=WorkingSaveMeta(format_version="1.0.0", storage_role="working_save", working_save_id="ws-recorded-first-success", name="Draft"),
+        circuit=CircuitModel(nodes=[{"id": "n1"}], edges=[], entry="n1", outputs=[]),
+        resources=ResourcesModel(prompts={}, providers={}, plugins={}),
+        state=StateModel(input={}, working={}, memory={}),
+        runtime=RuntimeModel(status="draft", validation_summary={}, last_run={}, errors=[]),
+        ui=UIModel(layout={}, metadata={"beginner_first_success_achieved": True, "provider_setup_env": {"OPENAI_API_KEY": "sk-test"}}),
+    )
+
+    vm = read_builder_shell_view_model(source, execution_record=_run())
+
+    assert vm.product_readiness.stages[0].stage_state == "complete"
+    assert vm.product_readiness.stages[1].stage_state == "complete"
+    assert vm.product_readiness.review_state in {"hold_return_use", "product_surface_stable"}
+

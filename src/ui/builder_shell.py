@@ -664,12 +664,9 @@ def _product_stage(*, stage_id: str, stage_label: str | None, stage_state: str, 
 def _first_success_achieved(*, source, execution_record: ExecutionRecordModel | None, execution_vm: ExecutionPanelViewModel | None) -> bool:
     if isinstance(source, WorkingSaveModel):
         metadata = _ui_metadata(source)
-        if bool(metadata.get("beginner_first_success_achieved")):
-            return True
-    if execution_vm is not None and execution_vm.result_reading.visible and execution_vm.result_reading.state == "ready":
-        return True
-    if isinstance(execution_record, ExecutionRecordModel):
-        return execution_record.meta.status in {"completed", "partial"}
+        return bool(metadata.get("beginner_first_success_achieved"))
+    if isinstance(source, ExecutionRecordModel):
+        return source.meta.status in {"completed", "partial"}
     return False
 
 
@@ -757,8 +754,12 @@ def _product_readiness_review(*, source, execution_record: ExecutionRecordModel 
         run_blockers = 0
         run_pending = 0
         run_summary = execution_vm.result_reading.summary or ui_text("shell.product_readiness.summary.result_ready", app_language=app_language, fallback_text="A readable result is already available for the first-success path.")
-        run_action_id = "open_result_history" if result_history_vm is not None and result_history_vm.visible else None
-        run_action_label = ui_text("builder.action.open_result_history", app_language=app_language, fallback_text="Open recent results") if run_action_id is not None else None
+        if first_success:
+            run_action_id = "open_result_history" if result_history_vm is not None and result_history_vm.visible else None
+            run_action_label = ui_text("builder.action.open_result_history", app_language=app_language, fallback_text="Open recent results") if run_action_id is not None else None
+        else:
+            run_action_id = "open_runtime_monitoring"
+            run_action_label = ui_text("builder.action.open_runtime_monitoring", app_language=app_language, fallback_text="Read result")
     elif _run_action_enabled(execution_vm):
         run_state = "ready_to_run"
         run_blockers = 0
@@ -803,7 +804,7 @@ def _product_readiness_review(*, source, execution_record: ExecutionRecordModel 
         app_language=app_language,
     )
 
-    return_use_unlocked = first_success or isinstance(source, ExecutionRecordModel) or (result_history_vm is not None and result_history_vm.visible)
+    return_use_unlocked = first_success or isinstance(source, ExecutionRecordModel)
     has_history = bool(result_history_vm is not None and result_history_vm.visible and result_history_vm.returned_count > 0)
     has_library = bool(circuit_library_vm is not None and circuit_library_vm.visible)
     has_feedback = bool(feedback_channel_vm is not None and feedback_channel_vm.visible)
@@ -862,7 +863,7 @@ def _product_readiness_review(*, source, execution_record: ExecutionRecordModel 
         bottleneck_stage = setup_stage
         summary_key = "shell.product_readiness.summary.hold_first_success_setup"
         fallback_summary = "The next real product bottleneck is still inside the first-success setup path. Finish goal entry or provider setup before widening scope."
-    elif (run_stage.blocker_count or run_stage.stage_state in {"ready_to_run", "run_in_progress", "fix_before_run", "waiting"}) and not first_success:
+    elif (run_stage.blocker_count or run_stage.stage_state in {"ready_to_run", "run_in_progress", "fix_before_run", "waiting", "complete"}) and not first_success:
         review_state = "hold_first_success_run"
         bottleneck_stage = run_stage
         summary_key = "shell.product_readiness.summary.hold_first_success_run"
