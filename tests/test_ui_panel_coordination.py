@@ -121,7 +121,7 @@ def test_panel_coordination_prefers_artifact_panel_when_artifact_selection_exist
         resources=ResourcesModel(prompts={}, providers={}, plugins={}),
         state=StateModel(input={}, working={}, memory={}),
         runtime=RuntimeModel(status="draft", validation_summary={}, last_run={}, errors=[]),
-        ui=UIModel(layout={}, metadata={"selected_artifact_ids": ["art-1"]}),
+        ui=UIModel(layout={}, metadata={"selected_artifact_ids": ["art-1"], "user_mode": "advanced"}),
     )
     validation = read_validation_panel_view_model(source, validation_report=_validation())
     execution = read_execution_panel_view_model(source, execution_record=_run(status="completed"))
@@ -142,7 +142,7 @@ def test_panel_coordination_prefers_trace_timeline_when_trace_selection_exists()
         resources=ResourcesModel(prompts={}, providers={}, plugins={}),
         state=StateModel(input={}, working={}, memory={}),
         runtime=RuntimeModel(status="draft", validation_summary={}, last_run={}, errors=[]),
-        ui=UIModel(layout={}, metadata={"selected_trace_event_ids": ["event-1"]}),
+        ui=UIModel(layout={}, metadata={"selected_trace_event_ids": ["event-1"], "user_mode": "advanced"}),
     )
     execution = read_execution_panel_view_model(source, execution_record=_run(status="completed"))
     trace = read_trace_timeline_view_model(_run(status="completed"))
@@ -205,3 +205,47 @@ def test_panel_coordination_unlocks_advanced_panels_after_first_success() -> Non
     assert "diff" in vm.visible_panels
     assert "trace_timeline" in vm.visible_panels
     assert "artifact" in vm.visible_panels
+
+
+def test_panel_coordination_locks_deep_panels_for_nonempty_beginner_workspace_before_first_success() -> None:
+    source = WorkingSaveModel(
+        meta=WorkingSaveMeta(format_version="1.0.0", storage_role="working_save", working_save_id="ws-beginner-nonempty", name="Draft"),
+        circuit=CircuitModel(nodes=[{"id": "n1"}], edges=[], entry="n1", outputs=[]),
+        resources=ResourcesModel(prompts={}, providers={}, plugins={}),
+        state=StateModel(input={}, working={}, memory={}),
+        runtime=RuntimeModel(status="draft", validation_summary={}, last_run={}, errors=[]),
+        ui=UIModel(layout={}, metadata={
+            "active_panel": "artifact",
+            "selected_artifact_ids": ["art-1"],
+            "visible_panels": ["graph", "inspector", "designer", "storage", "result_history", "diff", "trace_timeline", "artifact"],
+            "pinned_panels": ["storage", "trace_timeline", "designer"],
+            "panel_order": ["graph", "storage", "result_history", "artifact", "designer"],
+        }),
+    )
+    graph = read_graph_view_model(source)
+    designer = read_designer_panel_view_model(source)
+    storage = read_storage_view_model(source)
+    trace = read_trace_timeline_view_model(_run(status="completed"))
+    artifact = read_artifact_viewer_view_model(_run(status="completed"), selected_artifact_id="art-1")
+
+    vm = read_panel_coordination_state(
+        source,
+        graph_view=graph,
+        designer_view=designer,
+        storage_view=storage,
+        trace_view=trace,
+        artifact_view=artifact,
+    )
+
+    assert vm.active_panel == "inspector"
+    assert "graph" in vm.visible_panels
+    assert "inspector" in vm.visible_panels
+    assert "designer" in vm.visible_panels
+    assert "storage" not in vm.visible_panels
+    assert "result_history" not in vm.visible_panels
+    assert "diff" not in vm.visible_panels
+    assert "trace_timeline" not in vm.visible_panels
+    assert "artifact" not in vm.visible_panels
+    assert "storage" not in vm.pinned_panels
+    assert "trace_timeline" not in vm.pinned_panels
+    assert all(badge.panel_id not in {"storage", "result_history", "diff", "trace_timeline", "artifact"} for badge in vm.panel_badges)

@@ -20,7 +20,9 @@ from src.ui.trace_timeline_viewer import TraceTimelineViewerViewModel
 from src.ui.artifact_viewer import ArtifactViewerViewModel
 from src.ui.i18n import ui_language_from_sources, ui_text
 
-_ADVANCED_ONLY_PANELS = {"trace_timeline", "artifact", "diff"}
+_ADVANCED_ONLY_PANELS = {"trace_timeline", "artifact", "diff", "storage", "result_history"}
+_CORE_BEGINNER_PANELS = {"graph", "inspector", "validation", "execution", "designer", "circuit_library", "feedback_channel"}
+_EMPTY_BEGINNER_PANELS = {"designer", "validation"}
 
 
 @dataclass(frozen=True)
@@ -108,18 +110,24 @@ def _advanced_surfaces_unlocked(metadata: dict[str, Any], *, execution_view: Exe
     return _beginner_first_success_achieved(metadata, execution_view=execution_view)
 
 
+def _beginner_gate_active(
+    source: WorkingSaveModel | CommitSnapshotModel | ExecutionRecordModel | None,
+    *,
+    execution_view: ExecutionPanelViewModel | None = None,
+) -> bool:
+    if not isinstance(source, WorkingSaveModel):
+        return False
+    metadata = _ui_metadata(source)
+    return not _advanced_surfaces_unlocked(metadata, execution_view=execution_view)
+
+
 def _beginner_shell_active(
     source: WorkingSaveModel | CommitSnapshotModel | ExecutionRecordModel | None,
     *,
     graph_view: GraphWorkspaceViewModel | None = None,
     execution_view: ExecutionPanelViewModel | None = None,
 ) -> bool:
-    if not isinstance(source, WorkingSaveModel):
-        return False
-    metadata = _ui_metadata(source)
-    if _advanced_surfaces_unlocked(metadata, execution_view=execution_view):
-        return False
-    return _is_empty_working_save(source, graph_view=graph_view)
+    return _beginner_gate_active(source, execution_view=execution_view) and _is_empty_working_save(source, graph_view=graph_view)
 
 
 def _default_visible_panels(
@@ -137,19 +145,28 @@ def _default_visible_panels(
     result_history_view: ResultHistoryViewModel | None = None,
     feedback_channel_view: FeedbackChannelViewModel | None = None,
 ) -> list[str]:
+    beginner_gate_active = _beginner_gate_active(source, execution_view=execution_view)
     beginner_shell_active = _beginner_shell_active(source, graph_view=graph_view, execution_view=execution_view)
     panels: list[str] = []
-    if beginner_shell_active:
-        if designer_view is not None:
-            panels.append("designer")
-        if circuit_library_view is not None and circuit_library_view.visible:
-            panels.append("circuit_library")
-        if result_history_view is not None and result_history_view.visible:
-            panels.append("result_history")
-        if feedback_channel_view is not None and feedback_channel_view.visible:
-            panels.append("feedback_channel")
-        if validation_view is not None and validation_view.overall_status == "blocked":
-            panels.append("validation")
+    if beginner_gate_active:
+        if beginner_shell_active:
+            if designer_view is not None:
+                panels.append("designer")
+            if validation_view is not None and validation_view.overall_status == "blocked":
+                panels.append("validation")
+        else:
+            if graph_view is not None:
+                panels.extend(["graph", "inspector"])
+            if validation_view is not None:
+                panels.append("validation")
+            if execution_view is not None:
+                panels.append("execution")
+            if designer_view is not None:
+                panels.append("designer")
+            if circuit_library_view is not None and circuit_library_view.visible:
+                panels.append("circuit_library")
+            if feedback_channel_view is not None and feedback_channel_view.visible:
+                panels.append("feedback_channel")
     else:
         if graph_view is not None:
             panels.extend(["graph", "inspector"])
@@ -260,29 +277,40 @@ def read_panel_coordination_state(
     else:
         visible_panels = [str(v) for v in visible_panels_raw if v is not None]
     pinned_panels = [str(v) for v in metadata.get("pinned_panels", []) if v is not None]
+    beginner_gate_active = _beginner_gate_active(source, execution_view=execution_view)
     beginner_shell_active = _beginner_shell_active(source, graph_view=graph_view, execution_view=execution_view)
     advanced_unlocked = _advanced_surfaces_unlocked(metadata, execution_view=execution_view)
-    if beginner_shell_active and not advanced_unlocked:
-        allowed_panels = {"designer"}
-        if validation_view is not None and validation_view.overall_status == "blocked":
-            allowed_panels.add("validation")
-        visible_panels = [panel_id for panel_id in visible_panels if panel_id not in _ADVANCED_ONLY_PANELS and panel_id in allowed_panels]
+    allowed_beginner_panels = set(_EMPTY_BEGINNER_PANELS if beginner_shell_active else _CORE_BEGINNER_PANELS)
+    if beginner_gate_active and not advanced_unlocked:
+        visible_panels = [
+            panel_id
+            for panel_id in visible_panels
+            if panel_id in allowed_beginner_panels and panel_id not in _ADVANCED_ONLY_PANELS
+        ]
     panel_order = [str(v) for v in metadata.get("panel_order", visible_panels) if v is not None]
-    if beginner_shell_active and not advanced_unlocked:
-        panel_order = [panel_id for panel_id in panel_order if panel_id not in _ADVANCED_ONLY_PANELS]
-        pinned_panels = [panel_id for panel_id in pinned_panels if panel_id not in _ADVANCED_ONLY_PANELS]
+    if beginner_gate_active and not advanced_unlocked:
+        panel_order = [
+            panel_id
+            for panel_id in panel_order
+            if panel_id in allowed_beginner_panels and panel_id not in _ADVANCED_ONLY_PANELS
+        ]
+        pinned_panels = [
+            panel_id
+            for panel_id in pinned_panels
+            if panel_id in allowed_beginner_panels and panel_id not in _ADVANCED_ONLY_PANELS
+        ]
 
     active_panel = str(metadata.get("active_panel")) if metadata.get("active_panel") else ""
-    if beginner_shell_active and not advanced_unlocked and active_panel in _ADVANCED_ONLY_PANELS:
+    if beginner_gate_active and not advanced_unlocked and (active_panel in _ADVANCED_ONLY_PANELS or active_panel not in allowed_beginner_panels):
         active_panel = ""
     if not active_panel:
-        if selection.selected_artifact_ids:
+        if not beginner_gate_active and selection.selected_artifact_ids:
             active_panel = "artifact"
-        elif selection.selected_trace_event_ids:
+        elif not beginner_gate_active and selection.selected_trace_event_ids:
             active_panel = "trace_timeline"
-        elif selection.selected_diff_change_id is not None:
+        elif not beginner_gate_active and selection.selected_diff_change_id is not None:
             active_panel = "diff"
-        elif selection.selected_storage_ref is not None:
+        elif not beginner_gate_active and selection.selected_storage_ref is not None:
             active_panel = "storage"
         elif beginner_shell_active and designer_view is not None:
             active_panel = "designer"
@@ -333,6 +361,12 @@ def read_panel_coordination_state(
         badges.append(PanelBadgeView(panel_id="result_history", badge_style="info", count=result_history_view.returned_count, label=result_history_view.history_status))
     if feedback_channel_view is not None and feedback_channel_view.returned_count:
         badges.append(PanelBadgeView(panel_id="feedback_channel", badge_style="attention", count=feedback_channel_view.returned_count, label=feedback_channel_view.channel_status))
+    if beginner_gate_active and not advanced_unlocked:
+        badges = [
+            badge
+            for badge in badges
+            if badge.panel_id in allowed_beginner_panels and badge.panel_id not in _ADVANCED_ONLY_PANELS
+        ]
 
     stale_reference_count = 0
     if selection.primary_ref is None and any([
@@ -349,7 +383,12 @@ def read_panel_coordination_state(
         'result_history': result_history_view is not None and result_history_view.visible,
         'feedback_channel': feedback_channel_view is not None and feedback_channel_view.visible,
     }
-    if active_panel in supplemental_panels and supplemental_panels[active_panel] and active_panel not in visible_panels:
+    if (
+        active_panel in supplemental_panels
+        and supplemental_panels[active_panel]
+        and active_panel not in visible_panels
+        and not (beginner_gate_active and not advanced_unlocked and active_panel not in allowed_beginner_panels)
+    ):
         visible_panels.append(active_panel)
         if active_panel not in panel_order:
             panel_order.append(active_panel)

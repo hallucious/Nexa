@@ -70,10 +70,19 @@ def _load_callable(module_path, func_name: str):
 
 
 def run_in_sandbox(*, module_path, func_name: str, kwargs: dict, timeout_ms: int) -> SandboxResult:
-    """Entry used by external_loader.SandboxedCallable.call(...)."""
+    """Entry used by external_loader.SandboxedCallable.call(...).
+
+    Load the callable before the timed execution window.  Under a busy full-suite
+    run, import/thread startup latency can otherwise consume the small timeout
+    budget and misclassify an immediate plugin crash as TIMEOUT.  The timeout
+    budget is intended to bound the plugin call itself.
+    """
+    try:
+        fn = _load_callable(module_path, func_name)
+    except Exception as e:
+        return SandboxResult(ok=False, value=None, error=f"{type(e).__name__}: {e}", kind="CRASH")
 
     def _invoke():
-        fn = _load_callable(module_path, func_name)
         return fn(**kwargs)
 
     res = safe_call(_invoke, timeout_ms=timeout_ms)
