@@ -14,6 +14,7 @@ from src.storage.models.commit_snapshot_model import CommitSnapshotModel
 from src.storage.models.execution_record_model import ExecutionRecordModel
 from src.storage.models.working_save_model import WorkingSaveModel
 from src.ui.i18n import beginner_ui_text, ui_language_from_sources, ui_text
+from src.ui.beginner_milestones import beginner_surface_active, explicit_beginner_first_success_achieved
 from src.ui.provider_setup_guidance import ProviderSetupGuidanceView, ProviderInlineKeyEntryView, read_provider_setup_guidance_view_model, read_provider_inline_key_entry_view
 from src.ui.external_input_guidance import ExternalInputGuidanceView, read_external_input_guidance_view_model
 from src.ui.template_gallery import TemplateGalleryViewModel, read_template_gallery_view_model
@@ -215,10 +216,9 @@ def _session_keys_from_metadata(source) -> dict[str, str]:
 def _is_beginner_empty_workspace(source) -> bool:
     if not isinstance(source, WorkingSaveModel):
         return False
-    metadata = _working_save_metadata(source)
-    if bool(metadata.get("advanced_mode_requested")) or str(metadata.get("user_mode") or "").lower() == "advanced":
+    if not beginner_surface_active(source):
         return False
-    if bool(metadata.get("beginner_first_success_achieved")):
+    if explicit_beginner_first_success_achieved(source):
         return False
     return not source.circuit.nodes and not source.circuit.edges
 

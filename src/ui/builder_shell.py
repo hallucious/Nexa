@@ -30,7 +30,7 @@ from src.ui.graph_workspace import GraphPreviewOverlay, GraphWorkspaceViewModel,
 from src.ui.inspector_panel import SelectedObjectViewModel, read_selected_object_view_model
 from src.ui.i18n import beginner_ui_text, ui_language_from_sources, ui_text
 from src.ui.beginner_surface_gate import beginner_locked_policy_surface_ids
-from src.ui.beginner_milestones import explicit_beginner_first_success_achieved, return_use_ready, terminal_execution_record_view
+from src.ui.beginner_milestones import beginner_advanced_surfaces_unlocked, explicit_beginner_first_success_achieved, return_use_ready, terminal_execution_record_view
 from src.ui.panel_coordination import BuilderPanelCoordinationStateView, read_panel_coordination_state
 from src.ui.top_bar import BuilderTopBarViewModel, read_builder_top_bar_view_model
 from src.ui.command_palette import CommandPaletteViewModel, read_command_palette_view_model
@@ -256,8 +256,8 @@ def _synthetic_library_view(source: WorkingSaveModel | CommitSnapshotModel | Exe
         )
         metadata = dict(source.ui.metadata or {})
         onboarding_state = {
-            'current_step': metadata.get('beginner_current_step') or metadata.get('onboarding_step') or ('read_result' if metadata.get('beginner_first_success_achieved') else 'enter_goal'),
-            'first_success_achieved': bool(metadata.get('beginner_first_success_achieved')),
+            'current_step': metadata.get('beginner_current_step') or metadata.get('onboarding_step') or ('read_result' if explicit_beginner_first_success_achieved(source) else 'enter_goal'),
+            'first_success_achieved': explicit_beginner_first_success_achieved(source),
         }
     elif isinstance(execution_record, ExecutionRecordModel):
         latest_run_id = execution_record.meta.run_id
@@ -299,8 +299,8 @@ def _synthetic_result_history_view(source: WorkingSaveModel | CommitSnapshotMode
     if isinstance(source, WorkingSaveModel):
         metadata = dict(source.ui.metadata or {})
         onboarding_state = {
-            'current_step': metadata.get('beginner_current_step') or metadata.get('onboarding_step') or ('read_result' if metadata.get('beginner_first_success_achieved') else 'enter_goal'),
-            'first_success_achieved': bool(metadata.get('beginner_first_success_achieved')),
+            'current_step': metadata.get('beginner_current_step') or metadata.get('onboarding_step') or ('read_result' if explicit_beginner_first_success_achieved(source) else 'enter_goal'),
+            'first_success_achieved': explicit_beginner_first_success_achieved(source),
         }
         last_run = source.runtime.last_run or {}
         run_id = str(last_run.get('run_id') or '').strip()
@@ -385,19 +385,8 @@ def _is_empty_working_save(source: WorkingSaveModel | None) -> bool:
     return not source.circuit.nodes and not source.circuit.edges
 
 
-def _beginner_first_success_achieved(metadata: dict[str, Any], *, execution_vm: ExecutionPanelViewModel | None = None) -> bool:
-    return bool(metadata.get("beginner_first_success_achieved"))
-
-
-def _advanced_surfaces_unlocked(metadata: dict[str, Any], *, execution_vm: ExecutionPanelViewModel | None = None) -> bool:
-    if bool(metadata.get("advanced_surfaces_unlocked")):
-        return True
-    if bool(metadata.get("advanced_mode_requested")):
-        return True
-    if str(metadata.get("user_mode") or "").lower() == "advanced":
-        return True
-    return _beginner_first_success_achieved(metadata, execution_vm=execution_vm)
-
+def _advanced_surfaces_unlocked(source: WorkingSaveModel | CommitSnapshotModel | ExecutionRecordModel | LoadedNexArtifact | None, *, execution_vm: ExecutionPanelViewModel | None = None) -> bool:
+    return beginner_advanced_surfaces_unlocked(source)
 
 
 def _beginner_surface_policy(
@@ -1140,7 +1129,7 @@ def read_builder_shell_view_model(
     ) if isinstance(source_unwrapped, (WorkingSaveModel, CommitSnapshotModel)) else None
 
     empty_workspace_mode = _is_empty_working_save(source_unwrapped)
-    advanced_unlocked = _advanced_surfaces_unlocked(metadata, execution_vm=execution_vm)
+    advanced_unlocked = _advanced_surfaces_unlocked(source_unwrapped, execution_vm=execution_vm)
     beginner_mode = role == "working_save" and not advanced_unlocked
     diagnostics = BuilderShellDiagnosticsView(
         warning_count=warning_count,

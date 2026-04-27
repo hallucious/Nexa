@@ -96,18 +96,8 @@ def _is_empty_working_save(source: WorkingSaveModel | None, *, graph_view: Graph
     return True
 
 
-def _beginner_first_success_achieved(metadata: dict[str, Any], *, execution_view: ExecutionPanelViewModel | None = None) -> bool:
-    return bool(metadata.get("beginner_first_success_achieved"))
-
-
-def _advanced_surfaces_unlocked(metadata: dict[str, Any], *, execution_view: ExecutionPanelViewModel | None = None) -> bool:
-    if bool(metadata.get("advanced_surfaces_unlocked")):
-        return True
-    if bool(metadata.get("advanced_mode_requested")):
-        return True
-    if str(metadata.get("user_mode") or "").lower() == "advanced":
-        return True
-    return _beginner_first_success_achieved(metadata, execution_view=execution_view)
+def _advanced_surfaces_unlocked(source: WorkingSaveModel | CommitSnapshotModel | ExecutionRecordModel | LoadedNexArtifact | None, *, execution_view: ExecutionPanelViewModel | None = None) -> bool:
+    return beginner_advanced_surfaces_unlocked(source)
 
 
 def _beginner_gate_active(
@@ -314,7 +304,7 @@ def read_panel_coordination_state(
     pinned_panels = [str(v) for v in metadata.get("pinned_panels", []) if v is not None]
     beginner_gate_active = _beginner_gate_active(source, execution_view=execution_view)
     beginner_shell_active = _beginner_shell_active(source, graph_view=graph_view, execution_view=execution_view)
-    advanced_unlocked = _advanced_surfaces_unlocked(metadata, execution_view=execution_view)
+    advanced_unlocked = _advanced_surfaces_unlocked(source, execution_view=execution_view)
     allowed_beginner_panels = set(_EMPTY_BEGINNER_PANELS if beginner_shell_active else _CORE_BEGINNER_PANELS)
     panel_order = [str(v) for v in metadata.get("panel_order", visible_panels) if v is not None]
 
