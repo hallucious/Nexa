@@ -9,6 +9,7 @@ from src.storage.models.working_save_model import WorkingSaveModel
 from src.ui.action_schema import BuilderActionSchemaView, BuilderActionView, read_builder_action_schema
 from src.ui.builder_workflow_hub import BuilderWorkflowHubViewModel
 from src.ui.panel_coordination import BuilderPanelCoordinationStateView
+from src.ui.i18n import beginner_advanced_surfaces_unlocked, beginner_surface_active
 
 
 @dataclass(frozen=True)
@@ -40,6 +41,28 @@ class BuilderCommandRoutingViewModel:
 
 SourceLike = WorkingSaveModel | CommitSnapshotModel | ExecutionRecordModel | LoadedNexArtifact | None
 
+_BEGINNER_LOCKED_ACTION_IDS = {
+    "replay_latest",
+    "open_trace",
+    "open_artifacts",
+    "open_diff",
+    "compare_runs",
+    "open_latest_commit",
+    "select_rollback_target",
+    "open_result_history",
+}
+_BEGINNER_LOCK_REASON = "Advanced surfaces unlock after first success or explicit advanced request."
+
+
+
+def _beginner_gate_active(source) -> bool:
+    return beginner_surface_active(source) and not beginner_advanced_surfaces_unlocked(source)
+
+
+def _route_enabled_by_beginner_gate(action_id: str, source) -> tuple[bool, str | None]:
+    if _beginner_gate_active(source) and action_id in _BEGINNER_LOCKED_ACTION_IDS:
+        return False, _BEGINNER_LOCK_REASON
+    return True, None
 
 def _unwrap(source: SourceLike):
     if isinstance(source, LoadedNexArtifact):
@@ -127,6 +150,8 @@ def read_builder_command_routing_view_model(
             workflow_hub=workflow_hub,
             coordination_state=coordination_state,
         )
+        beginner_allowed, beginner_reason = _route_enabled_by_beginner_gate(action.action_id, source_unwrapped)
+        route_enabled = action.enabled and beginner_allowed
         routes.append(
             BuilderCommandRouteView(
                 route_id=f"route:{action.action_id}",
@@ -138,8 +163,8 @@ def read_builder_command_routing_view_model(
                 preferred_workspace_id=workspace_id,
                 preferred_panel_id=panel_id,
                 engine_boundary=engine_boundary,
-                enabled=action.enabled,
-                reason_disabled=action.reason_disabled,
+                enabled=route_enabled,
+                reason_disabled=action.reason_disabled if not action.enabled else beginner_reason,
                 destructive=action.destructive,
                 requires_confirmation=action.requires_confirmation,
             )

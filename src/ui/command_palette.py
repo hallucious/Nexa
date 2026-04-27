@@ -14,7 +14,7 @@ from src.ui.designer_panel import DesignerPanelViewModel, read_designer_panel_vi
 from src.ui.diff_viewer import DiffViewerViewModel, read_diff_view_model
 from src.ui.execution_panel import ExecutionPanelViewModel, read_execution_panel_view_model
 from src.ui.graph_workspace import GraphPreviewOverlay, GraphWorkspaceViewModel, read_graph_view_model
-from src.ui.i18n import beginner_ui_text, ui_language_from_sources, ui_text
+from src.ui.i18n import beginner_advanced_surfaces_unlocked, beginner_surface_active, beginner_ui_text, ui_language_from_sources, ui_text
 from src.ui.panel_coordination import BuilderPanelCoordinationStateView, read_panel_coordination_state
 from src.ui.storage_panel import StoragePanelViewModel, read_storage_view_model
 from src.ui.trace_timeline_viewer import TraceTimelineViewerViewModel, read_trace_timeline_view_model
@@ -48,6 +48,65 @@ class CommandPaletteViewModel:
 
 SourceLike = WorkingSaveModel | CommitSnapshotModel | ExecutionRecordModel | LoadedNexArtifact | None
 
+_BEGINNER_LOCKED_PANEL_IDS = {"trace_timeline", "artifact", "diff", "storage", "result_history"}
+_BEGINNER_LOCKED_ACTION_IDS = {
+    "replay_latest",
+    "open_trace",
+    "open_artifacts",
+    "open_diff",
+    "compare_runs",
+    "open_latest_commit",
+    "select_rollback_target",
+    "open_result_history",
+}
+_BEGINNER_LOCK_REASON = "Advanced surfaces unlock after first success or explicit advanced request."
+
+
+
+def _beginner_locked_panel_ids(source, execution_record=None) -> set[str]:
+    if not beginner_surface_active(source):
+        return set()
+    if beginner_advanced_surfaces_unlocked(source):
+        return set()
+    return set(_BEGINNER_LOCKED_PANEL_IDS)
+
+
+def _entry_blocked_by_beginner_gate(entry: CommandPaletteEntryView, locked_panel_ids: set[str]) -> bool:
+    if not locked_panel_ids:
+        return False
+    if entry.preferred_panel_id not in locked_panel_ids:
+        return False
+    if entry.entry_type == "action":
+        return entry.action_id in _BEGINNER_LOCKED_ACTION_IDS
+    return True
+
+
+def _apply_beginner_surface_gate(
+    entries: list[CommandPaletteEntryView],
+    *,
+    locked_panel_ids: set[str],
+) -> list[CommandPaletteEntryView]:
+    if not locked_panel_ids:
+        return entries
+    gated: list[CommandPaletteEntryView] = []
+    for entry in entries:
+        if _entry_blocked_by_beginner_gate(entry, locked_panel_ids):
+            gated.append(
+                CommandPaletteEntryView(
+                    entry_id=entry.entry_id,
+                    entry_type=entry.entry_type,
+                    label=entry.label,
+                    target_ref=entry.target_ref,
+                    preferred_workspace_id=entry.preferred_workspace_id,
+                    preferred_panel_id=entry.preferred_panel_id,
+                    action_id=entry.action_id,
+                    enabled=False,
+                    reason_disabled=entry.reason_disabled or _BEGINNER_LOCK_REASON,
+                )
+            )
+        else:
+            gated.append(entry)
+    return gated
 
 def _unwrap(source: SourceLike):
     if isinstance(source, LoadedNexArtifact):
@@ -325,6 +384,8 @@ def read_command_palette_view_model(
         designer_view=designer_view,
     )
 
+    locked_panel_ids = _beginner_locked_panel_ids(source_unwrapped, execution_record)
+
     entries = [
         *_action_entries(action_schema),
         *_node_entries(graph_view),
@@ -335,6 +396,8 @@ def read_command_palette_view_model(
         *_artifact_entries(artifact_view, app_language=app_language),
         *_diff_entries(diff_view, preview_overlay=preview_overlay, app_language=app_language),
     ]
+
+    entries = _apply_beginner_surface_gate(entries, locked_panel_ids=locked_panel_ids)
 
     if approval_flow is not None and approval_flow.current_stage not in {None, "idle", "none", "completed"}:
         entries.insert(

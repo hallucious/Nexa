@@ -85,3 +85,30 @@ def test_dispatch_contract_includes_core_workspace_navigation_fields() -> None:
     assert [field.field_name for field in contracts["open_visual_editor"].required_fields] == ["workspace_id", "panel_id"]
     assert [field.field_name for field in contracts["open_node_configuration"].required_fields] == ["workspace_id", "panel_id"]
     assert [field.field_name for field in contracts["open_runtime_monitoring"].required_fields] == ["workspace_id", "panel_id"]
+
+
+def test_command_routing_blocks_beginner_locked_deep_surface_actions_before_first_success() -> None:
+    working = _working_save()
+    execution = read_execution_panel_view_model(working, execution_record=_run())
+    action_schema = read_builder_action_schema(working, execution_view=execution)
+
+    vm = read_builder_command_routing_view_model(working, action_schema=action_schema)
+    routes = {route.action_id: route for route in vm.routes}
+
+    assert routes["replay_latest"].enabled is False
+    assert routes["open_diff"].enabled is False
+    assert routes["replay_latest"].reason_disabled is not None
+    assert routes["open_diff"].reason_disabled is not None
+
+
+def test_command_dispatch_blocks_beginner_locked_deep_surface_actions_before_first_success() -> None:
+    working = _working_save()
+    execution = read_execution_panel_view_model(working, execution_record=_run())
+    action_schema = read_builder_action_schema(working, execution_view=execution)
+    routing = read_builder_command_routing_view_model(working, action_schema=action_schema)
+
+    vm = read_command_dispatch_contract_view_model(working, command_routing=routing)
+    contracts = {item.action_id: item for item in vm.contracts}
+
+    assert contracts["replay_latest"].dispatch_allowed is False
+    assert contracts["open_diff"].dispatch_allowed is False

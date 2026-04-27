@@ -157,3 +157,53 @@ def test_command_palette_includes_core_workspace_navigation_entries_after_beginn
     assert entries["open_visual_editor"].preferred_workspace_id == "visual_editor"
     assert entries["open_node_configuration"].preferred_workspace_id == "node_configuration"
     assert entries["open_runtime_monitoring"].preferred_workspace_id == "runtime_monitoring"
+
+
+def test_command_palette_disables_beginner_locked_deep_surface_entries_before_first_success() -> None:
+    beginner = _working_save()
+    execution = read_execution_panel_view_model(beginner, execution_record=_run(status="completed"))
+    action_schema = read_builder_action_schema(beginner, execution_view=execution)
+
+    vm = read_command_palette_view_model(
+        beginner,
+        validation_report=_validation_report(),
+        execution_record=_run(status="completed"),
+        preview_overlay=GraphPreviewOverlay(overlay_id="preview-locked", preview_ref="preview:locked", summary="preview"),
+        action_schema=action_schema,
+    )
+
+    locked_panel_ids = {"trace_timeline", "artifact", "diff", "storage", "result_history"}
+    locked_jump_entries = [
+        entry
+        for entry in vm.entries
+        if entry.entry_type == "jump" and entry.preferred_panel_id in locked_panel_ids
+    ]
+
+    assert locked_jump_entries
+    assert all(entry.enabled is False for entry in locked_jump_entries)
+    assert all(entry.reason_disabled is not None for entry in locked_jump_entries)
+    assert any(entry.entry_id.startswith("jump:storage:") for entry in locked_jump_entries)
+    assert any(entry.entry_id.startswith("jump:trace:") for entry in locked_jump_entries)
+    assert any(entry.entry_id.startswith("jump:artifact:") for entry in locked_jump_entries)
+    assert any(entry.entry_id.startswith("jump:diff:") for entry in locked_jump_entries)
+
+
+
+def test_command_palette_enables_locked_surface_entries_after_beginner_unlock() -> None:
+    working = _working_save()
+    working.ui.metadata["beginner_first_success_achieved"] = True
+
+    vm = read_command_palette_view_model(
+        working,
+        validation_report=_validation_report(),
+        execution_record=_run(status="completed"),
+        preview_overlay=GraphPreviewOverlay(overlay_id="preview-unlocked", preview_ref="preview:unlocked", summary="preview"),
+    )
+
+    entries_by_panel = {}
+    for entry in vm.entries:
+        entries_by_panel.setdefault(entry.preferred_panel_id, []).append(entry)
+
+    assert any(entry.enabled for entry in entries_by_panel["trace_timeline"])
+    assert any(entry.enabled for entry in entries_by_panel["artifact"])
+    assert any(entry.enabled for entry in entries_by_panel["diff"])
