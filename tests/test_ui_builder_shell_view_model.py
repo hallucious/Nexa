@@ -12,6 +12,7 @@ from src.storage.models.execution_record_model import ArtifactRecordCard, Execut
 from src.storage.models.shared_sections import CircuitModel, ResourcesModel, StateModel
 from src.storage.models.working_save_model import RuntimeModel, UIModel, WorkingSaveMeta, WorkingSaveModel
 from src.ui.builder_shell import read_builder_shell_view_model
+from src.ui.beginner_surface_gate import beginner_locked_policy_surface_ids
 from src.ui.graph_workspace import GraphPreviewOverlay
 
 
@@ -368,6 +369,22 @@ def test_builder_shell_projects_beginner_onboarding_hint_for_empty_workspace() -
     assert vm.beginner_onboarding.title == "Start with your goal"
     assert vm.beginner_onboarding.primary_action_label == "Open Designer"
     assert vm.beginner_onboarding.primary_action_target == "designer"
+
+
+def test_builder_shell_surface_policy_uses_shared_beginner_locked_policy_ids() -> None:
+    source = WorkingSaveModel(
+        meta=WorkingSaveMeta(format_version="1.0.0", storage_role="working_save", working_save_id="ws-policy", name="Policy Draft"),
+        circuit=CircuitModel(nodes=[{"id": "n1"}], edges=[], entry="n1", outputs=[]),
+        resources=ResourcesModel(prompts={}, providers={}, plugins={}),
+        state=StateModel(input={}, working={}, memory={}),
+        runtime=RuntimeModel(status="draft", validation_summary={}, last_run={}, errors=[]),
+        ui=UIModel(layout={}, metadata={}),
+    )
+
+    vm = read_builder_shell_view_model(source)
+
+    assert vm.beginner_surface_policy.visible is True
+    assert vm.beginner_surface_policy.suppressed_surface_ids == beginner_locked_policy_surface_ids()
 
 
 def test_builder_shell_projects_beginner_onboarding_hint_for_blocked_validation() -> None:

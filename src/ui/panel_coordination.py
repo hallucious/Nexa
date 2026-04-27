@@ -19,8 +19,9 @@ from src.ui.validation_panel import ValidationPanelViewModel
 from src.ui.trace_timeline_viewer import TraceTimelineViewerViewModel
 from src.ui.artifact_viewer import ArtifactViewerViewModel
 from src.ui.i18n import ui_language_from_sources, ui_text
+from src.ui.beginner_surface_gate import BEGINNER_LOCKED_DEEP_SURFACE_PANEL_IDS
 
-_ADVANCED_ONLY_PANELS = {"trace_timeline", "artifact", "diff", "storage", "result_history"}
+_ADVANCED_ONLY_PANELS = BEGINNER_LOCKED_DEEP_SURFACE_PANEL_IDS
 _CORE_BEGINNER_PANELS = {"graph", "inspector", "validation", "execution", "designer", "circuit_library", "feedback_channel"}
 _EMPTY_BEGINNER_PANELS = {"designer", "validation"}
 

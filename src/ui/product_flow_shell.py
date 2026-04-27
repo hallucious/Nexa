@@ -20,6 +20,7 @@ from src.ui.builder_shell import BuilderShellViewModel, read_builder_shell_view_
 from src.ui.builder_workflow_hub import BuilderWorkflowHubViewModel, read_builder_workflow_hub_view_model
 from src.ui.graph_workspace import GraphPreviewOverlay
 from src.ui.i18n import beginner_surface_active, ui_language_from_sources, ui_text
+from src.ui.beginner_surface_gate import BEGINNER_ALLOWED_FALLBACK_PANEL_IDS, panel_ids_from_policy_surface_ids
 from src.ui.product_flow_journey import ProductFlowJourneyViewModel, read_product_flow_journey_view_model
 from src.ui.product_flow_runbook import ProductFlowRunbookViewModel, read_product_flow_runbook_view_model
 from src.ui.product_flow_handoff import ProductFlowHandoffViewModel, read_product_flow_handoff_view_model
@@ -97,15 +98,7 @@ class ProductFlowShellViewModel:
 
 SourceLike = WorkingSaveModel | CommitSnapshotModel | ExecutionRecordModel | LoadedNexArtifact | None
 
-_SUPPRESSED_SURFACE_TO_PANEL = {
-    "trace_timeline": "trace_timeline",
-    "diff_viewer": "diff",
-    "artifact_viewer": "artifact",
-    "storage_panel": "storage",
-    "result_history": "result_history",
-}
-
-_ALLOWED_BEGINNER_FALLBACK_PANELS = ("validation", "execution", "designer", "inspector")
+_ALLOWED_BEGINNER_FALLBACK_PANELS = BEGINNER_ALLOWED_FALLBACK_PANEL_IDS
 
 
 def _suppressed_panel_ids(shell_vm: BuilderShellViewModel | None) -> set[str]:
@@ -114,12 +107,7 @@ def _suppressed_panel_ids(shell_vm: BuilderShellViewModel | None) -> set[str]:
     policy = shell_vm.beginner_surface_policy
     if not policy.visible or policy.can_open_advanced_surfaces:
         return set()
-    return {
-        panel_id
-        for surface_id in policy.suppressed_surface_ids
-        for panel_id in [_SUPPRESSED_SURFACE_TO_PANEL.get(surface_id)]
-        if panel_id is not None
-    }
+    return panel_ids_from_policy_surface_ids(policy.suppressed_surface_ids)
 
 
 def _fallback_panel_id(shell_vm: BuilderShellViewModel, *, preferred: tuple[str, ...] = _ALLOWED_BEGINNER_FALLBACK_PANELS) -> str:

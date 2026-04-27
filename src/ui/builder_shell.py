@@ -29,6 +29,7 @@ from src.ui.execution_panel import ExecutionPanelViewModel, read_execution_panel
 from src.ui.graph_workspace import GraphPreviewOverlay, GraphWorkspaceViewModel, read_graph_view_model
 from src.ui.inspector_panel import SelectedObjectViewModel, read_selected_object_view_model
 from src.ui.i18n import beginner_ui_text, ui_language_from_sources, ui_text
+from src.ui.beginner_surface_gate import beginner_locked_policy_surface_ids
 from src.ui.panel_coordination import BuilderPanelCoordinationStateView, read_panel_coordination_state
 from src.ui.top_bar import BuilderTopBarViewModel, read_builder_top_bar_view_model
 from src.ui.command_palette import CommandPaletteViewModel, read_command_palette_view_model
@@ -425,13 +426,7 @@ def _beginner_surface_policy(
             ),
         )
 
-    suppressed = [
-        "trace_timeline",
-        "diff_viewer",
-        "artifact_viewer",
-        "storage_panel",
-        "result_history",
-    ]
+    suppressed = list(beginner_locked_policy_surface_ids())
     graph_first_allowed = not empty_workspace_mode
     primary_surface_id = "node_configuration"
     explanation_key = "beginner.surface_policy.first_success.explanation"

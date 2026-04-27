@@ -7,7 +7,7 @@ from src.ui.action_schema import BuilderActionView
 from src.ui.i18n import beginner_advanced_surfaces_unlocked, beginner_surface_active
 
 
-BEGINNER_LOCKED_DEEP_SURFACE_ACTION_IDS = {
+BEGINNER_LOCKED_DEEP_SURFACE_ACTION_IDS = frozenset({
     "replay_latest",
     "open_trace",
     "open_artifacts",
@@ -16,15 +16,27 @@ BEGINNER_LOCKED_DEEP_SURFACE_ACTION_IDS = {
     "open_latest_commit",
     "select_rollback_target",
     "open_result_history",
-}
+})
 
-BEGINNER_LOCKED_DEEP_SURFACE_PANEL_IDS = {
+BEGINNER_LOCKED_DEEP_SURFACE_PANEL_IDS = frozenset({
     "trace_timeline",
     "artifact",
     "diff",
     "storage",
     "result_history",
+})
+
+BEGINNER_LOCKED_DEEP_SURFACE_POLICY_TO_PANEL = {
+    "trace_timeline": "trace_timeline",
+    "diff_viewer": "diff",
+    "artifact_viewer": "artifact",
+    "storage_panel": "storage",
+    "result_history": "result_history",
 }
+
+BEGINNER_LOCKED_DEEP_SURFACE_POLICY_IDS = tuple(BEGINNER_LOCKED_DEEP_SURFACE_POLICY_TO_PANEL.keys())
+
+BEGINNER_ALLOWED_FALLBACK_PANEL_IDS = ("validation", "execution", "designer", "inspector")
 
 BEGINNER_LOCKED_DEEP_SURFACE_REASON = "Advanced surfaces unlock after first success or explicit advanced request."
 
@@ -76,9 +88,25 @@ def is_beginner_locked_panel(panel_id: str | None, *sources: Any) -> bool:
     )
 
 
+def panel_ids_from_policy_surface_ids(surface_ids: Iterable[str]) -> set[str]:
+    return {
+        panel_id
+        for surface_id in surface_ids
+        for panel_id in [BEGINNER_LOCKED_DEEP_SURFACE_POLICY_TO_PANEL.get(str(surface_id))]
+        if panel_id is not None
+    }
+
+
+def beginner_locked_policy_surface_ids() -> tuple[str, ...]:
+    return BEGINNER_LOCKED_DEEP_SURFACE_POLICY_IDS
+
+
 __all__ = [
     "BEGINNER_LOCKED_DEEP_SURFACE_ACTION_IDS",
     "BEGINNER_LOCKED_DEEP_SURFACE_PANEL_IDS",
+    "BEGINNER_LOCKED_DEEP_SURFACE_POLICY_TO_PANEL",
+    "BEGINNER_LOCKED_DEEP_SURFACE_POLICY_IDS",
+    "BEGINNER_ALLOWED_FALLBACK_PANEL_IDS",
     "BEGINNER_LOCKED_DEEP_SURFACE_REASON",
     "beginner_deep_surface_gate_active",
     "gate_beginner_action",
@@ -87,4 +115,6 @@ __all__ = [
     "enabled_action_map",
     "is_beginner_locked_action",
     "is_beginner_locked_panel",
+    "panel_ids_from_policy_surface_ids",
+    "beginner_locked_policy_surface_ids",
 ]

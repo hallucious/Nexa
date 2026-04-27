@@ -11,6 +11,7 @@ from src.ui.command_dispatch_contract import read_command_dispatch_contract_view
 from src.ui.execution_panel import read_execution_panel_view_model
 from src.ui.action_schema import read_builder_action_schema
 from src.ui.command_routing import read_builder_command_routing_view_model
+from src.ui.beginner_surface_gate import BEGINNER_LOCKED_DEEP_SURFACE_REASON
 from src.ui.intent_emission import read_intent_emission_view_model
 def _working_save() -> WorkingSaveModel:
     return WorkingSaveModel(

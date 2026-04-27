@@ -14,7 +14,13 @@ from src.ui.designer_panel import DesignerPanelViewModel, read_designer_panel_vi
 from src.ui.diff_viewer import DiffViewerViewModel, read_diff_view_model
 from src.ui.execution_panel import ExecutionPanelViewModel, read_execution_panel_view_model
 from src.ui.graph_workspace import GraphPreviewOverlay, GraphWorkspaceViewModel, read_graph_view_model
-from src.ui.i18n import beginner_advanced_surfaces_unlocked, beginner_surface_active, beginner_ui_text, ui_language_from_sources, ui_text
+from src.ui.beginner_surface_gate import (
+    BEGINNER_LOCKED_DEEP_SURFACE_ACTION_IDS,
+    BEGINNER_LOCKED_DEEP_SURFACE_PANEL_IDS,
+    BEGINNER_LOCKED_DEEP_SURFACE_REASON,
+    beginner_deep_surface_gate_active,
+)
+from src.ui.i18n import beginner_ui_text, ui_language_from_sources, ui_text
 from src.ui.panel_coordination import BuilderPanelCoordinationStateView, read_panel_coordination_state
 from src.ui.storage_panel import StoragePanelViewModel, read_storage_view_model
 from src.ui.trace_timeline_viewer import TraceTimelineViewerViewModel, read_trace_timeline_view_model
@@ -48,27 +54,10 @@ class CommandPaletteViewModel:
 
 SourceLike = WorkingSaveModel | CommitSnapshotModel | ExecutionRecordModel | LoadedNexArtifact | None
 
-_BEGINNER_LOCKED_PANEL_IDS = {"trace_timeline", "artifact", "diff", "storage", "result_history"}
-_BEGINNER_LOCKED_ACTION_IDS = {
-    "replay_latest",
-    "open_trace",
-    "open_artifacts",
-    "open_diff",
-    "compare_runs",
-    "open_latest_commit",
-    "select_rollback_target",
-    "open_result_history",
-}
-_BEGINNER_LOCK_REASON = "Advanced surfaces unlock after first success or explicit advanced request."
-
-
-
 def _beginner_locked_panel_ids(source, execution_record=None) -> set[str]:
-    if not beginner_surface_active(source):
+    if not beginner_deep_surface_gate_active(source):
         return set()
-    if beginner_advanced_surfaces_unlocked(source):
-        return set()
-    return set(_BEGINNER_LOCKED_PANEL_IDS)
+    return set(BEGINNER_LOCKED_DEEP_SURFACE_PANEL_IDS)
 
 
 def _entry_blocked_by_beginner_gate(entry: CommandPaletteEntryView, locked_panel_ids: set[str]) -> bool:
@@ -77,7 +66,7 @@ def _entry_blocked_by_beginner_gate(entry: CommandPaletteEntryView, locked_panel
     if entry.preferred_panel_id not in locked_panel_ids:
         return False
     if entry.entry_type == "action":
-        return entry.action_id in _BEGINNER_LOCKED_ACTION_IDS
+        return entry.action_id in BEGINNER_LOCKED_DEEP_SURFACE_ACTION_IDS
     return True
 
 
@@ -101,7 +90,7 @@ def _apply_beginner_surface_gate(
                     preferred_panel_id=entry.preferred_panel_id,
                     action_id=entry.action_id,
                     enabled=False,
-                    reason_disabled=entry.reason_disabled or _BEGINNER_LOCK_REASON,
+                    reason_disabled=entry.reason_disabled or BEGINNER_LOCKED_DEEP_SURFACE_REASON,
                 )
             )
         else:
