@@ -167,12 +167,47 @@ def render_web_run_entry_html(
         <li>{escape(ui_text("web.run.step.poll", app_language=app_language, fallback_text="Poll workspace runs or run status."))} <code>/api/workspaces/{escape(workspace_id)}/runs</code></li>
         <li>{escape(ui_text("web.run.step.result", app_language=app_language, fallback_text="Read the result."))} <code>/app/workspaces/{escape(workspace_id)}/results</code></li>
       </ol>
+      <form
+        id="run-submit-form"
+        class="card"
+        aria-label="Run submission form"
+        data-submit-path="/api/runs"
+        data-upload-page-path="/app/workspaces/{escape(workspace_id)}/upload?app_language={escape(app_language)}"
+        data-result-history-path="/app/workspaces/{escape(workspace_id)}/results?app_language={escape(app_language)}"
+      >
+        <h2>{escape(ui_text("web.run.submit.title", app_language=app_language, fallback_text="Submit run"))}</h2>
+        <p>{escape(ui_text("web.run.submit.summary", app_language=app_language, fallback_text="Submit only after the current workspace draft and any required uploads are ready."))}</p>
+        <pre id="run-submit-payload-example" aria-label="Run submit payload example">{{&quot;workspace_id&quot;:&quot;{escape(workspace_id)}&quot;,&quot;launch_source&quot;:&quot;web_skeleton&quot;}}</pre>
+      </form>
+      <section
+        id="run-progress-panel"
+        class="card"
+        aria-label="Run progress panel"
+        data-workspace-runs-path="/api/workspaces/{escape(workspace_id)}/runs"
+        data-run-status-template="/api/runs/{{run_id}}"
+        data-run-actions-template="/api/runs/{{run_id}}/actions"
+      >
+        <h2>{escape(ui_text("web.run.progress.title", app_language=app_language, fallback_text="Run progress"))}</h2>
+        <p>{escape(ui_text("web.run.progress.summary", app_language=app_language, fallback_text="After submission, poll run status and available actions before opening the result."))}</p>
+      </section>
+      <section
+        id="run-result-handoff-panel"
+        class="card"
+        aria-label="Run result handoff panel"
+        data-run-result-template="/api/runs/{{run_id}}/result"
+        data-result-history-path="/app/workspaces/{escape(workspace_id)}/results?app_language={escape(app_language)}"
+        data-shell-draft-path="/api/workspaces/{escape(workspace_id)}/shell/draft"
+      >
+        <h2>{escape(ui_text("web.run.result_handoff.title", app_language=app_language, fallback_text="Result handoff"))}</h2>
+        <p>{escape(ui_text("web.run.result_handoff.summary", app_language=app_language, fallback_text="Open the result page, read the selected output, then mark the first result as read through UI-owned Working Save metadata."))}</p>
+      </section>
       <div id="result-screen-minimum" class="card">
         <h2>{escape(ui_text("web.result.minimum.title", app_language=app_language, fallback_text="Result screen minimum"))}</h2>
         <p>{escape(ui_text("web.result.minimum.summary", app_language=app_language, fallback_text="The result page must show completed, running, failed, and empty states without exposing raw internals."))}</p>
       </div>
       <div class="actions">
         <a class="button" href="/app/workspaces/{escape(workspace_id)}/results?app_language={escape(app_language)}">Open results</a>
+        <a class="button secondary" href="/app/workspaces/{escape(workspace_id)}/upload?app_language={escape(app_language)}">Back to upload safety gate</a>
         <a class="button secondary" href="/app/workspaces/{escape(workspace_id)}?app_language={escape(app_language)}">Back to workspace</a>
       </div>
     </section>

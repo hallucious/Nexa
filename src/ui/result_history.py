@@ -19,6 +19,7 @@ class ResultHistoryItemView:
     source_artifact: dict[str, object] | None = None
     output_preview: str | None = None
     output_label: str | None = None
+    output_key: str | None = None
     open_result_href: str | None = None
     continue_href: str | None = None
     summary_lines: list[str] = field(default_factory=list)
@@ -253,10 +254,13 @@ def _result_history_item(item: object, result: object | None, *, app_language: s
     output_preview = None
     output_label = None
     final_output = _field(result, "final_output") if result is not None else None
+    output_key = None
     if final_output is not None:
         output_preview = _field(final_output, "value_preview")
-        output_key = _localized_output_key(_field(final_output, "output_key"), app_language=app_language)
-        output_label = ui_text("result_history.output_label", app_language=app_language, fallback_text=f"Latest output ({output_key})", output_key=output_key)
+        raw_output_key = str(_field(final_output, "output_key") or "").strip()
+        output_key = raw_output_key or None
+        localized_output_key = _localized_output_key(raw_output_key, app_language=app_language)
+        output_label = ui_text("result_history.output_label", app_language=app_language, fallback_text=f"Latest output ({localized_output_key})", output_key=localized_output_key)
     workspace_id = str(_field(item, "workspace_id") or "")
     run_id = str(_field(item, "run_id") or "")
     open_result_href = f"/app/workspaces/{workspace_id}/results?run_id={run_id}"
@@ -275,6 +279,7 @@ def _result_history_item(item: object, result: object | None, *, app_language: s
         source_artifact=_result_history_source_artifact(item, result),
         output_preview=output_preview,
         output_label=output_label,
+        output_key=output_key,
         open_result_href=open_result_href,
         continue_href=continue_href,
         summary_lines=summary_lines,

@@ -1874,6 +1874,14 @@ def test_fastapi_binding_workspace_result_history_routes_round_trip() -> None:
     assert page_response.status_code == 200
     assert 'Recent results' in page_response.text
     assert 'Latest Hello' in page_response.text
+    assert 'first-success-result-read-panel' in page_response.text
+    assert 'mark-selected-result-read' in page_response.text
+    assert 'data-action-kind="first_success_completion"' in page_response.text
+    assert 'data-first-success-action="mark_first_result_read"' in page_response.text
+    assert 'data-shell-draft-path="/api/workspaces/ws-001/shell/draft"' in page_response.text
+    assert 'data-run-id="run-002"' in page_response.text
+    assert 'data-output-ref="answer"' in page_response.text
+    assert 'data-artifact-ref="artifact-2"' in page_response.text
 
 
 
@@ -3747,7 +3755,14 @@ def test_fastapi_web_skeleton_upload_submit_result_entry_pages() -> None:
     assert "POST /api/runs" in run.text
     assert "/api/workspaces/ws-001/runs" in run.text
     assert "result-screen-minimum" in run.text
-    assert "/app/workspaces/ws-001/results" in run.text
+    assert "run-submit-form" in run.text
+    assert "data-submit-path=\"/api/runs\"" in run.text
+    assert "data-run-status-template=\"/api/runs/{run_id}\"" in run.text
+    assert "data-run-actions-template=\"/api/runs/{run_id}/actions\"" in run.text
+    assert "run-result-handoff-panel" in run.text
+    assert "data-run-result-template=\"/api/runs/{run_id}/result\"" in run.text
+    assert "data-shell-draft-path=\"/api/workspaces/ws-001/shell/draft\"" in run.text
+    assert "/app/workspaces/ws-001/results?app_language=en" in run.text
 
     workspace = client.get("/app/workspaces/ws-001", headers=_session_headers())
     assert workspace.status_code == 200

@@ -20,6 +20,22 @@ def _run_context_for_row(workspace_context: WorkspaceAuthorizationContext, row: 
     return RunAuthorizationContext(run_id=run_id, workspace_context=workspace_context, run_owner_user_ref=owner)
 
 
+
+
+def _first_artifact_ref_for_run(run_id: str, artifact_rows_lookup: Any | None) -> str | None:
+    if not run_id or artifact_rows_lookup is None:
+        return None
+    try:
+        artifact_rows = tuple(artifact_rows_lookup(run_id) or ())
+    except (TypeError, ValueError):
+        return None
+    for row in artifact_rows:
+        artifact_id = str((row or {}).get("artifact_id") or "").strip()
+        if artifact_id:
+            return artifact_id
+    return None
+
+
 def _workspace_onboarding_state(*, request_auth, onboarding_rows: Sequence[Mapping[str, Any]], workspace_id: str) -> dict[str, Any] | None:
     user_id = str(getattr(request_auth, "requested_by_user_ref", "") or "").strip()
     if not user_id or not workspace_id:
@@ -123,6 +139,10 @@ def build_workspace_result_history_payload(
         summary_empty=ui_text("server.result_history.summary_empty", app_language=app_language, fallback_text="No recent results are visible yet."),
         detail_empty=ui_text("server.result_history.detail_empty", app_language=app_language, fallback_text="Result history detail will appear here once runs exist."),
     )
+    first_artifact_ref_by_run_id = {
+        item.run_id: _first_artifact_ref_for_run(item.run_id, artifact_rows_lookup)
+        for item in view_model.items
+    }
     item_sections = []
     for item in view_model.items:
         selected = item.run_id == view_model.selected_run_id
@@ -137,6 +157,16 @@ def build_workspace_result_history_payload(
                 "open_result_href": item.open_result_href,
                 "continue_href": item.continue_href,
                 "feedback_href": f"/app/workspaces/{response.workspace_id}/feedback?surface=result_history&run_id={item.run_id}&app_language={app_language}",
+                "output_key": item.output_key,
+                "first_artifact_ref": first_artifact_ref_by_run_id.get(item.run_id),
+                "first_success_completion": {
+                    "action_id": "mark_first_result_read",
+                    "action_kind": "first_success_completion",
+                    "draft_write_path": f"/api/workspaces/{response.workspace_id}/shell/draft",
+                    "run_id": item.run_id,
+                    "output_ref": item.output_key,
+                    "artifact_ref": first_artifact_ref_by_run_id.get(item.run_id),
+                },
                 "section": build_shell_section(
                     headline=item.result_title,
                     lines=[item.status_label] + list(item.summary_lines),
@@ -151,6 +181,9 @@ def build_workspace_result_history_payload(
             }
         )
     selected_item = next((item for item in view_model.items if item.run_id == view_model.selected_run_id), None)
+    selected_result_payload = asdict(selected_item) if selected_item is not None else None
+    if selected_result_payload is not None:
+        selected_result_payload["first_artifact_ref"] = first_artifact_ref_by_run_id.get(str(selected_result_payload.get("run_id") or ""))
     onboarding_banner = None
     if view_model.onboarding_incomplete:
         onboarding_banner = {
@@ -168,7 +201,7 @@ def build_workspace_result_history_payload(
         "result_history": asdict(view_model),
         "overview_section": overview,
         "item_sections": item_sections,
-        "selected_result": asdict(selected_item) if selected_item is not None else None,
+        "selected_result": selected_result_payload,
         "onboarding_banner": onboarding_banner,
         "app_language": app_language,
         "routes": {
@@ -238,6 +271,20 @@ def render_workspace_result_history_html(payload: Mapping[str, Any]) -> str:
     selected_output_html = ""
     if selected.get("output_preview"):
         selected_output_html = f'<section class="selected-output" role="region" aria-labelledby="selected-output-title"><h2 id="selected-output-title">{escape(str(selected.get("output_label") or ui_text("server.result_history.selected_output_title", app_language=app_language, fallback_text="Selected output")))}</h2><pre>{escape(str(selected.get("output_preview") or ""))}</pre></section>'
+    first_success_completion_html = ""
+    selected_run_id = str(selected.get("run_id") or "").strip()
+    if selected_run_id:
+        selected_output_ref = escape(str(selected.get("output_key") or ""))
+        selected_artifact_ref = escape(str(selected.get("first_artifact_ref") or ""))
+        selected_run_ref = escape(selected_run_id)
+        workspace_id = escape(str(payload.get("workspace_id") or history.get("workspace_id") or ""))
+        first_success_completion_html = (
+            '<section id="first-success-result-read-panel" class="selected-output" role="region" aria-labelledby="first-success-result-read-title">'
+            f'<h2 id="first-success-result-read-title">{escape(ui_text("server.result_history.first_success_read_title", app_language=app_language, fallback_text="Finish first result reading"))}</h2>'
+            f'<p>{escape(ui_text("server.result_history.first_success_read_summary", app_language=app_language, fallback_text="Mark this result as read using UI-owned Working Save metadata. Execution records are not mutated."))}</p>'
+            f'<button id="mark-selected-result-read" type="button" data-action-kind="first_success_completion" data-first-success-action="mark_first_result_read" data-shell-draft-path="/api/workspaces/{workspace_id}/shell/draft" data-run-id="{selected_run_ref}" data-output-ref="{selected_output_ref}" data-artifact-ref="{selected_artifact_ref}">{escape(ui_text("server.result_history.mark_result_read", app_language=app_language, fallback_text="Mark result as read"))}</button>'
+            '</section>'
+        )
     onboarding_html = ""
     workspace_feedback_href = escape(str((payload.get('routes') or {}).get('workspace_feedback_page') or '#'))
     if onboarding_banner:
@@ -289,6 +336,7 @@ def render_workspace_result_history_html(payload: Mapping[str, Any]) -> str:
       </header>
       {onboarding_html}
       {selected_output_html}
+      {first_success_completion_html}
       <section class="result-grid" aria-label="{escape(ui_text('server.result_history.recent_history_aria', app_language=app_language, fallback_text='Recent result history'))}">{cards_html}</section>
     </main>
   </body>
