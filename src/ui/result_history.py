@@ -20,6 +20,14 @@ class ResultHistoryItemView:
     output_preview: str | None = None
     output_label: str | None = None
     output_key: str | None = None
+    output_value_type: str | None = None
+    result_render_kind: str = "plain_text"
+    result_render_label: str | None = None
+    output_lines: list[str] = field(default_factory=list)
+    output_key_value_pairs: list[dict[str, str]] = field(default_factory=list)
+    copy_output_text: str | None = None
+    copy_action_label: str | None = None
+    reuse_action_label: str | None = None
     open_result_href: str | None = None
     continue_href: str | None = None
     summary_lines: list[str] = field(default_factory=list)
@@ -239,6 +247,68 @@ def _result_summary_text(item: object, result: object | None, *, app_language: s
 
 
 
+
+
+def _clean_output_lines(value: object) -> list[str]:
+    raw = str(value or "").replace("\r\n", "\n").replace("\r", "\n")
+    return [line.strip() for line in raw.split("\n") if line.strip()]
+
+
+def _key_value_pairs_from_lines(lines: Sequence[str]) -> list[dict[str, str]]:
+    pairs: list[dict[str, str]] = []
+    for line in lines:
+        if ":" not in line:
+            return []
+        key, value = line.split(":", 1)
+        key = key.strip(" -*•\t")
+        value = value.strip()
+        if not key or not value:
+            return []
+        pairs.append({"key": key, "value": value})
+    return pairs
+
+
+def _list_items_from_lines(lines: Sequence[str]) -> list[str]:
+    items: list[str] = []
+    for line in lines:
+        stripped = line.strip()
+        if stripped.startswith(("- ", "* ", "• ")):
+            items.append(stripped[2:].strip())
+            continue
+        head, dot, tail = stripped.partition(".")
+        if dot and head.isdigit() and tail.strip():
+            items.append(tail.strip())
+            continue
+        return []
+    return items
+
+
+def _result_render_projection(output_preview: object, value_type: object, *, app_language: str) -> tuple[str, str, list[str], list[dict[str, str]]]:
+    lines = _clean_output_lines(output_preview)
+    normalized_type = str(value_type or "").strip().lower()
+    key_value_pairs = _key_value_pairs_from_lines(lines)
+    if key_value_pairs and (normalized_type in {"object", "dict", "mapping", "json", "structured"} or len(key_value_pairs) >= 2):
+        return (
+            "key_value",
+            ui_text("result_history.render_kind.key_value", app_language=app_language, fallback_text="Structured result"),
+            [],
+            key_value_pairs,
+        )
+    list_items = _list_items_from_lines(lines)
+    if list_items and len(list_items) >= 2:
+        return (
+            "list_text",
+            ui_text("result_history.render_kind.list_text", app_language=app_language, fallback_text="List result"),
+            list_items,
+            [],
+        )
+    return (
+        "plain_text",
+        ui_text("result_history.render_kind.plain_text", app_language=app_language, fallback_text="Plain text result"),
+        lines,
+        [],
+    )
+
 def _localized_output_key(value: object, *, app_language: str) -> str:
     raw = str(value or "").strip()
     if not raw:
@@ -255,12 +325,25 @@ def _result_history_item(item: object, result: object | None, *, app_language: s
     output_label = None
     final_output = _field(result, "final_output") if result is not None else None
     output_key = None
+    output_value_type = None
+    result_render_kind = "plain_text"
+    result_render_label = ui_text("result_history.render_kind.plain_text", app_language=app_language, fallback_text="Plain text result")
+    output_lines: list[str] = []
+    output_key_value_pairs: list[dict[str, str]] = []
+    copy_output_text = None
     if final_output is not None:
         output_preview = _field(final_output, "value_preview")
+        output_value_type = str(_field(final_output, "value_type") or "").strip() or None
         raw_output_key = str(_field(final_output, "output_key") or "").strip()
         output_key = raw_output_key or None
         localized_output_key = _localized_output_key(raw_output_key, app_language=app_language)
         output_label = ui_text("result_history.output_label", app_language=app_language, fallback_text=f"Latest output ({localized_output_key})", output_key=localized_output_key)
+        result_render_kind, result_render_label, output_lines, output_key_value_pairs = _result_render_projection(
+            output_preview,
+            output_value_type,
+            app_language=app_language,
+        )
+        copy_output_text = str(output_preview or "")
     workspace_id = str(_field(item, "workspace_id") or "")
     run_id = str(_field(item, "run_id") or "")
     open_result_href = f"/app/workspaces/{workspace_id}/results?run_id={run_id}"
@@ -280,6 +363,14 @@ def _result_history_item(item: object, result: object | None, *, app_language: s
         output_preview=output_preview,
         output_label=output_label,
         output_key=output_key,
+        output_value_type=output_value_type,
+        result_render_kind=result_render_kind,
+        result_render_label=result_render_label,
+        output_lines=output_lines,
+        output_key_value_pairs=output_key_value_pairs,
+        copy_output_text=copy_output_text,
+        copy_action_label=ui_text("result_history.action.copy_output", app_language=app_language, fallback_text="Copy result"),
+        reuse_action_label=ui_text("result_history.action.continue_from_result", app_language=app_language, fallback_text="Continue from this result"),
         open_result_href=open_result_href,
         continue_href=continue_href,
         summary_lines=summary_lines,

@@ -270,7 +270,36 @@ def render_workspace_result_history_html(payload: Mapping[str, Any]) -> str:
         """
     selected_output_html = ""
     if selected.get("output_preview"):
-        selected_output_html = f'<section class="selected-output" role="region" aria-labelledby="selected-output-title"><h2 id="selected-output-title">{escape(str(selected.get("output_label") or ui_text("server.result_history.selected_output_title", app_language=app_language, fallback_text="Selected output")))}</h2><pre>{escape(str(selected.get("output_preview") or ""))}</pre></section>'
+        render_kind = escape(str(selected.get("result_render_kind") or "plain_text"))
+        render_label = escape(str(selected.get("result_render_label") or ui_text("server.result_history.result_render_kind", app_language=app_language, fallback_text="Result format")))
+        output_label = escape(str(selected.get("output_label") or ui_text("server.result_history.selected_output_title", app_language=app_language, fallback_text="Selected output")))
+        output_key = escape(str(selected.get("output_key") or ""))
+        copy_output = escape(str(selected.get("copy_output_text") or selected.get("output_preview") or ""), quote=True)
+        continue_href = escape(str(selected.get("continue_href") or (payload.get("routes") or {}).get("workspace_page") or "#"))
+        feedback_href = escape(str((payload.get("routes") or {}).get("workspace_feedback_page") or "#"))
+        result_body_html = f'<pre class="plain-result">{escape(str(selected.get("output_preview") or ""))}</pre>'
+        if selected.get("output_key_value_pairs"):
+            pairs_html = "".join(
+                f'<dt>{escape(str(pair.get("key") or ""))}</dt><dd>{escape(str(pair.get("value") or ""))}</dd>'
+                for pair in selected.get("output_key_value_pairs") or []
+            )
+            result_body_html = f'<dl class="structured-result">{pairs_html}</dl>'
+        elif selected.get("output_lines") and selected.get("result_render_kind") == "list_text":
+            lines_html = "".join(f'<li>{escape(str(line))}</li>' for line in selected.get("output_lines") or [])
+            result_body_html = f'<ul class="list-result">{lines_html}</ul>'
+        selected_output_html = (
+            '<section id="beginner-result-screen" class="selected-output" role="region" aria-labelledby="selected-output-title" '
+            f'data-result-render-kind="{render_kind}" data-output-key="{output_key}">'
+            f'<h2 id="selected-output-title">{output_label}</h2>'
+            f'<p class="result-render-label">{render_label}</p>'
+            f'{result_body_html}'
+            '<div id="result-surface-action-panel" class="actions" aria-label="Result actions">'
+            f'<button id="copy-selected-result" type="button" data-copy-output="{copy_output}">{escape(ui_text("server.result_history.copy_result", app_language=app_language, fallback_text="Copy result"))}</button>'
+            f'<a id="continue-from-selected-result" class="action-link" href="{continue_href}">{escape(ui_text("server.result_history.continue_from_result", app_language=app_language, fallback_text="Continue from this result"))}</a>'
+            f'<a id="report-selected-result-issue" class="action-link secondary" href="{feedback_href}">{escape(ui_text("server.result_history.report_result_issue", app_language=app_language, fallback_text="Report result issue"))}</a>'
+            '</div>'
+            '</section>'
+        )
     first_success_completion_html = ""
     selected_run_id = str(selected.get("run_id") or "").strip()
     if selected_run_id:

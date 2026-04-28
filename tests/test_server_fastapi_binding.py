@@ -1882,7 +1882,72 @@ def test_fastapi_binding_workspace_result_history_routes_round_trip() -> None:
     assert 'data-run-id="run-002"' in page_response.text
     assert 'data-output-ref="answer"' in page_response.text
     assert 'data-artifact-ref="artifact-2"' in page_response.text
+    assert api_payload['selected_result']['result_render_kind'] == 'plain_text'
+    assert api_payload['selected_result']['copy_output_text'] == 'Latest Hello'
+    assert 'beginner-result-screen' in page_response.text
+    assert 'data-result-render-kind="plain_text"' in page_response.text
+    assert 'copy-selected-result' in page_response.text
+    assert 'data-copy-output="Latest Hello"' in page_response.text
+    assert 'continue-from-selected-result' in page_response.text
+    assert 'report-selected-result-issue' in page_response.text
 
+
+def test_fastapi_binding_workspace_result_history_renders_type_aware_result_shapes() -> None:
+    structured_client = _make_client(
+        workspace_result_rows={
+            'run-002': {
+                'run_id': 'run-002',
+                'workspace_id': 'ws-001',
+                'result_state': 'ready_success',
+                'final_status': 'completed',
+                'result_summary': 'Success.',
+                'updated_at': '2026-04-11T12:01:05+00:00',
+                'final_output': {
+                    'output_key': 'answer',
+                    'value_preview': 'Decision: Approve\nRisk: Low\nNext step: Send summary',
+                    'value_type': 'object',
+                },
+            }
+        }
+    )
+    structured_api = structured_client.get('/api/workspaces/ws-001/result-history?run_id=run-002', headers=_session_headers())
+    assert structured_api.status_code == 200
+    structured_payload = structured_api.json()
+    assert structured_payload['selected_result']['result_render_kind'] == 'key_value'
+    assert structured_payload['selected_result']['output_key_value_pairs'][0] == {'key': 'Decision', 'value': 'Approve'}
+    structured_page = structured_client.get('/app/workspaces/ws-001/results?run_id=run-002', headers=_session_headers())
+    assert structured_page.status_code == 200
+    assert 'data-result-render-kind="key_value"' in structured_page.text
+    assert 'structured-result' in structured_page.text
+    assert '<dt>Decision</dt><dd>Approve</dd>' in structured_page.text
+
+    list_client = _make_client(
+        workspace_result_rows={
+            'run-002': {
+                'run_id': 'run-002',
+                'workspace_id': 'ws-001',
+                'result_state': 'ready_success',
+                'final_status': 'completed',
+                'result_summary': 'Success.',
+                'updated_at': '2026-04-11T12:01:05+00:00',
+                'final_output': {
+                    'output_key': 'answer',
+                    'value_preview': '- First item\n- Second item',
+                    'value_type': 'string',
+                },
+            }
+        }
+    )
+    list_api = list_client.get('/api/workspaces/ws-001/result-history?run_id=run-002', headers=_session_headers())
+    assert list_api.status_code == 200
+    list_payload = list_api.json()
+    assert list_payload['selected_result']['result_render_kind'] == 'list_text'
+    assert list_payload['selected_result']['output_lines'] == ['First item', 'Second item']
+    list_page = list_client.get('/app/workspaces/ws-001/results?run_id=run-002', headers=_session_headers())
+    assert list_page.status_code == 200
+    assert 'data-result-render-kind="list_text"' in list_page.text
+    assert 'list-result' in list_page.text
+    assert '<li>First item</li>' in list_page.text
 
 
 def test_fastapi_binding_library_and_result_history_align_with_server_onboarding_progress() -> None:
