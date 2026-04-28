@@ -1305,6 +1305,115 @@ def _first_success_run_section(
 
 
 
+def _first_success_flow_section(
+    shell_map: Mapping[str, Any],
+    routes: Mapping[str, Any],
+    *,
+    app_language: str = "en",
+) -> dict[str, Any]:
+    flow = shell_map.get("first_success_flow") if isinstance(shell_map, Mapping) else {}
+    flow = flow if isinstance(flow, Mapping) else {}
+    result = flow.get("result_reading") if isinstance(flow.get("result_reading"), Mapping) else {}
+    designer = flow.get("designer_proposal") if isinstance(flow.get("designer_proposal"), Mapping) else {}
+    steps = tuple(item for item in (flow.get("steps") or ()) if isinstance(item, Mapping))
+
+    flow_state = str(flow.get("flow_state") or "hidden").strip() or "hidden"
+    current_step_id = str(flow.get("current_step_id") or "").strip() or None
+    current_step_label = str(flow.get("current_step_label") or current_step_id or "").strip() or None
+    summary = str(flow.get("summary") or "").strip() or None
+    next_action_id = str(flow.get("next_action_id") or "").strip() or None
+    next_action_label = str(flow.get("next_action_label") or "").strip() or None
+    unlock_condition = str(flow.get("unlock_condition") or "").strip() or None
+    advanced_unlocked = bool(flow.get("advanced_surfaces_unlocked"))
+
+    def _action_target(action_id: str | None) -> str | None:
+        if action_id == "open_result_history":
+            return str(routes.get("workspace_result_history_page") or "").strip() or None
+        if action_id in {"open_runtime_monitoring", "mark_first_result_read"}:
+            return "runtime.result"
+        if action_id in {"open_designer", "approve_for_commit"}:
+            return "designer"
+        if action_id == "open_provider_setup":
+            return str(routes.get("workspace_provider_bindings") or "").strip() or "designer"
+        if action_id == "open_file_input":
+            return str(routes.get("workspace_upload_page") or "").strip() or None
+        if action_id == "open_node_configuration":
+            return "validation.detail"
+        return None
+
+    controls: list[dict[str, Any]] = []
+    target = _action_target(next_action_id)
+    if next_action_label and target:
+        controls.append({
+            "control_id": f"first-success-flow-{next_action_id}",
+            "label": next_action_label,
+            "action_kind": "open_route" if target.startswith("/") else "focus_section",
+            "action_target": target,
+        })
+
+    completion_action_id = str(result.get("completion_action_id") or "").strip() or None
+    completion_action_label = str(result.get("completion_action_label") or "").strip() or None
+    completion_target = _action_target(completion_action_id)
+    if completion_action_label and completion_target:
+        controls.append({
+            "control_id": f"first-success-flow-{completion_action_id}",
+            "label": completion_action_label,
+            "action_kind": "focus_section",
+            "action_target": completion_target,
+        })
+
+    lines = _summary_lines(
+        ui_text("server.shell.first_success_flow_state_prefix", app_language=app_language, fallback_text="Flow state: {state}", state=flow_state.replace("_", " ")),
+        ui_text("server.shell.first_success_flow_current_step_prefix", app_language=app_language, fallback_text="Current step: {step}", step=current_step_label or ui_text("server.shell.first_success_flow_no_step", app_language=app_language, fallback_text="No active step")),
+        summary,
+        ui_text("server.shell.first_success_flow_unlock_prefix", app_language=app_language, fallback_text="Advanced surfaces: {state}", state=(ui_text("server.shell.unlocked", app_language=app_language, fallback_text="unlocked") if advanced_unlocked else ui_text("server.shell.locked", app_language=app_language, fallback_text="locked"))),
+        ui_text("server.shell.first_success_flow_unlock_condition_prefix", app_language=app_language, fallback_text="Unlock condition: {condition}", condition=unlock_condition) if unlock_condition else None,
+    )
+
+    detail_items: list[str] = []
+    for step in steps:
+        step_id = str(step.get("step_id") or "").strip() or "step"
+        label = str(step.get("label") or step_id).strip()
+        state = str(step.get("state") or "pending").strip() or "pending"
+        step_summary = str(step.get("summary") or "").strip()
+        detail_items.append(f"{label}: {state}")
+        if step_summary:
+            detail_items.append(f"{label} summary: {step_summary}")
+    if designer and designer.get("visible"):
+        detail_items.append(f"Designer proposal: {designer.get('proposal_state') or 'available'}")
+        if designer.get("summary"):
+            detail_items.append(f"Designer summary: {designer.get('summary')}")
+    if result and result.get("visible"):
+        detail_items.append(f"Result reading: {result.get('state') or 'available'}")
+        if result.get("summary"):
+            detail_items.append(f"Result summary: {result.get('summary')}")
+        if result.get("output_ref"):
+            detail_items.append(f"Output ref: {result.get('output_ref')}")
+        if result.get("artifact_ref"):
+            detail_items.append(f"Artifact ref: {result.get('artifact_ref')}")
+
+    section = build_shell_section(
+        headline=ui_text("server.shell.first_success_flow", app_language=app_language, fallback_text="First-success flow"),
+        lines=lines,
+        detail_title=ui_text("server.shell.first_success_flow_detail", app_language=app_language, fallback_text="First-success flow detail"),
+        detail_items=detail_items,
+        summary_empty=ui_text("server.shell.first_success_flow_pending", app_language=app_language, fallback_text="First-success flow guidance will appear here once the workspace shell is available."),
+        detail_empty=ui_text("server.shell.first_success_flow_pending", app_language=app_language, fallback_text="First-success flow guidance will appear here once the workspace shell is available."),
+        controls=controls,
+        history=steps,
+    )
+    section.update({
+        "flow_state": flow_state,
+        "current_step_id": current_step_id,
+        "next_action_id": next_action_id,
+        "advanced_surfaces_unlocked": advanced_unlocked,
+        "unlock_condition": unlock_condition,
+        "result_reading": dict(result),
+        "designer_proposal": dict(designer),
+    })
+    return section
+
+
 def _return_use_continuity_section(
     server_product_readiness_review: Mapping[str, Any] | None,
     *,
@@ -3494,6 +3603,7 @@ def build_workspace_shell_runtime_payload(
         "provider_readiness_section": _provider_readiness_section(provider_binding_rows, managed_secret_rows, provider_probe_rows, workspace_id, app_language=app_language),
         "first_success_setup_section": _first_success_setup_section(asdict(shell_vm), asdict(template_gallery) if template_gallery is not None else None, server_product_readiness_review, onboarding_state=onboarding_state, provider_binding_rows=provider_binding_rows, managed_secret_rows=managed_secret_rows, provider_probe_rows=provider_probe_rows, workspace_id=workspace_id, routes=routes, app_language=app_language, persisted_state=server_backed_state.get("designer")),
         "first_success_run_section": _first_success_run_section(asdict(shell_vm), server_product_readiness_review, latest_run_status_preview=latest_run_status_preview, latest_run_result_preview=latest_run_result_preview, latest_run_trace_preview=latest_run_trace_preview, latest_run_artifacts_preview=latest_run_artifacts_preview, onboarding_state=onboarding_state, workspace_id=workspace_id, routes=routes, app_language=app_language),
+        "first_success_flow_section": _first_success_flow_section(asdict(shell_vm), routes, app_language=app_language),
         "return_use_continuity_section": _return_use_continuity_section(server_product_readiness_review, recent_run_rows=recent_run_rows, result_rows_by_run_id=result_rows_by_run_id, feedback_rows=feedback_rows, onboarding_state=onboarding_state, workspace_id=workspace_id, routes=routes, app_language=app_language),
         "product_surface_review_section": _product_surface_review_section(server_product_readiness_review, feedback_rows, workspace_id, routes=routes, app_language=app_language),
         "feedback_continuity_section": _feedback_continuity_section(server_product_readiness_review, feedback_rows, workspace_id, recent_run_rows=recent_run_rows, onboarding_state=onboarding_state, routes=routes, app_language=app_language),
@@ -3560,6 +3670,7 @@ def render_workspace_shell_runtime_html(payload: Mapping[str, Any]) -> str:
     provider_readiness_section_json = json.dumps(payload.get("provider_readiness_section"), ensure_ascii=False)
     first_success_setup_section_json = json.dumps(payload.get("first_success_setup_section"), ensure_ascii=False)
     first_success_run_section_json = json.dumps(payload.get("first_success_run_section"), ensure_ascii=False)
+    first_success_flow_section_json = json.dumps(payload.get("first_success_flow_section"), ensure_ascii=False)
     return_use_continuity_section_json = json.dumps(payload.get("return_use_continuity_section"), ensure_ascii=False)
     product_surface_review_section_json = json.dumps(payload.get("product_surface_review_section"), ensure_ascii=False)
     feedback_continuity_section_json = json.dumps(payload.get("feedback_continuity_section"), ensure_ascii=False)
@@ -3844,6 +3955,12 @@ def render_workspace_shell_runtime_html(payload: Mapping[str, Any]) -> str:
         <pre id="first-success-run-detail">{escape(ui_text("server.shell.first_success_run_pending", app_language=app_language, fallback_text="First-success run guidance will appear here once the workspace shell is available."))}</pre>
         <div id="first-success-run-controls" class="actions"></div>
       </section>
+      <section id="first-success-flow-card" tabindex="-1" class="card focus-target" role="region" aria-labelledby="first-success-flow-title">
+        <h2 id="first-success-flow-title">{escape(ui_text("server.shell.first_success_flow", app_language=app_language, fallback_text="First-success flow"))}</h2>
+        <pre id="first-success-flow-summary">{escape(ui_text("server.shell.first_success_flow_pending", app_language=app_language, fallback_text="First-success flow guidance will appear here once the workspace shell is available."))}</pre>
+        <pre id="first-success-flow-detail">{escape(ui_text("server.shell.first_success_flow_pending", app_language=app_language, fallback_text="First-success flow guidance will appear here once the workspace shell is available."))}</pre>
+        <div id="first-success-flow-controls" class="actions"></div>
+      </section>
     </div>
     <div class="row">
       <section id="return-use-continuity-card" tabindex="-1" class="card focus-target" role="region" aria-labelledby="return-use-continuity-title">
@@ -3894,6 +4011,7 @@ def render_workspace_shell_runtime_html(payload: Mapping[str, Any]) -> str:
     const initialProviderReadinessSection = {provider_readiness_section_json};
     const initialFirstSuccessSetupSection = {first_success_setup_section_json};
     const initialFirstSuccessRunSection = {first_success_run_section_json};
+    const initialFirstSuccessFlowSection = {first_success_flow_section_json};
     const initialReturnUseContinuitySection = {return_use_continuity_section_json};
     const initialProductSurfaceReviewSection = {product_surface_review_section_json};
     const initialFeedbackContinuitySection = {feedback_continuity_section_json};
@@ -3939,6 +4057,9 @@ def render_workspace_shell_runtime_html(payload: Mapping[str, Any]) -> str:
     const firstSuccessRunSummaryEl = document.getElementById('first-success-run-summary');
     const firstSuccessRunDetailEl = document.getElementById('first-success-run-detail');
     const firstSuccessRunControlsEl = document.getElementById('first-success-run-controls');
+    const firstSuccessFlowSummaryEl = document.getElementById('first-success-flow-summary');
+    const firstSuccessFlowDetailEl = document.getElementById('first-success-flow-detail');
+    const firstSuccessFlowControlsEl = document.getElementById('first-success-flow-controls');
     const returnUseContinuitySummaryEl = document.getElementById('return-use-continuity-summary');
     const returnUseContinuityDetailEl = document.getElementById('return-use-continuity-detail');
     const returnUseContinuityControlsEl = document.getElementById('return-use-continuity-controls');
@@ -3982,6 +4103,7 @@ def render_workspace_shell_runtime_html(payload: Mapping[str, Any]) -> str:
     let currentProviderReadinessSection = initialProviderReadinessSection || null;
     let currentFirstSuccessSetupSection = initialFirstSuccessSetupSection || null;
     let currentFirstSuccessRunSection = initialFirstSuccessRunSection || null;
+    let currentFirstSuccessFlowSection = initialFirstSuccessFlowSection || null;
     let currentReturnUseContinuitySection = initialReturnUseContinuitySection || null;
     let currentProductSurfaceReviewSection = initialProductSurfaceReviewSection || null;
     let currentFeedbackContinuitySection = initialFeedbackContinuitySection || null;
@@ -4267,6 +4389,9 @@ def render_workspace_shell_runtime_html(payload: Mapping[str, Any]) -> str:
     }}
     function writeFirstSuccessRunSection(section) {{
       currentFirstSuccessRunSection = writeShellSection(section, currentFirstSuccessRunSection, firstSuccessRunSummaryEl, firstSuccessRunDetailEl, firstSuccessRunControlsEl, 'First-success run guidance will appear here once the workspace shell is available.', 'First-success run guidance will appear here once the workspace shell is available.');
+    }}
+    function writeFirstSuccessFlowSection(section) {{
+      currentFirstSuccessFlowSection = writeShellSection(section, currentFirstSuccessFlowSection, firstSuccessFlowSummaryEl, firstSuccessFlowDetailEl, firstSuccessFlowControlsEl, 'First-success flow guidance will appear here once the workspace shell is available.', 'First-success flow guidance will appear here once the workspace shell is available.');
     }}
     function writeReturnUseContinuitySection(section) {{
       currentReturnUseContinuitySection = writeShellSection(section, currentReturnUseContinuitySection, returnUseContinuitySummaryEl, returnUseContinuityDetailEl, returnUseContinuityControlsEl, 'Return-use continuity will appear here.', 'Return-use continuity detail will appear here.');
@@ -4694,6 +4819,7 @@ def render_workspace_shell_runtime_html(payload: Mapping[str, Any]) -> str:
     writeProviderReadinessSection(initialProviderReadinessSection);
     writeFirstSuccessSetupSection(initialFirstSuccessSetupSection);
     writeFirstSuccessRunSection(initialFirstSuccessRunSection);
+    writeFirstSuccessFlowSection(initialFirstSuccessFlowSection);
     writeReturnUseContinuitySection(initialReturnUseContinuitySection);
     writeProductSurfaceReviewSection(initialProductSurfaceReviewSection);
     writeFeedbackContinuitySection(initialFeedbackContinuitySection);
@@ -4734,6 +4860,9 @@ def render_workspace_shell_runtime_html(payload: Mapping[str, Any]) -> str:
       }}
       if (body.first_success_run_section) {{
         writeFirstSuccessRunSection(body.first_success_run_section);
+      }}
+      if (body.first_success_flow_section) {{
+        writeFirstSuccessFlowSection(body.first_success_flow_section);
       }}
       if (body.return_use_continuity_section) {{
         writeReturnUseContinuitySection(body.return_use_continuity_section);

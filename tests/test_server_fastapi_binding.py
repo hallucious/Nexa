@@ -3724,3 +3724,23 @@ def test_fastapi_web_skeleton_upload_submit_result_entry_pages() -> None:
     assert "open-submit-run-page" in workspace.text
     assert "/app/workspaces/ws-001/upload?app_language=en" in workspace.text
     assert "/app/workspaces/ws-001/run?app_language=en" in workspace.text
+
+
+def test_fastapi_workspace_shell_renders_first_success_flow_bridge() -> None:
+    client = _make_client()
+
+    api_response = client.get('/api/workspaces/ws-001/shell', headers=_session_headers())
+    assert api_response.status_code == 200
+    payload = api_response.json()
+    assert 'first_success_flow_section' in payload
+    assert payload['first_success_flow_section']['summary']['headline'] == 'First-success flow'
+    assert 'flow_state' in payload['first_success_flow_section']
+    assert 'current_step_id' in payload['first_success_flow_section']
+
+    page_response = client.get('/app/workspaces/ws-001?app_language=en', headers=_session_headers())
+    assert page_response.status_code == 200
+    body = page_response.text
+    assert 'first-success-flow-card' in body
+    assert 'first-success-flow-summary' in body
+    assert 'initialFirstSuccessFlowSection' in body
+    assert 'writeFirstSuccessFlowSection' in body
