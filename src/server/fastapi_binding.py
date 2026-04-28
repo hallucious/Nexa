@@ -2953,6 +2953,38 @@ class FastApiRouteBindings:
             payload = json.loads(outbound.body_text)
             return HTMLResponse(content=render_workspace_shell_runtime_html(payload), status_code=200)
 
+        @router.post("/api/workspaces/{workspace_id}/uploads/presign")
+        async def presign_file_upload(request: Request, workspace_id: str, payload: dict[str, Any] | None = Body(default=None)) -> Response:
+            inbound = self._inbound_request(request=request, path_params={"workspace_id": workspace_id}, json_body=payload)
+            outbound = FrameworkRouteBindings.handle_presign_file_upload(
+                request=inbound,
+                workspace_id=workspace_id,
+                file_upload_store=self.dependencies.file_upload_store,
+            )
+            return self._framework_response(outbound)
+
+        @router.post("/api/workspaces/{workspace_id}/uploads/{upload_id}/confirm")
+        async def confirm_file_upload(request: Request, workspace_id: str, upload_id: str, payload: dict[str, Any] | None = Body(default=None)) -> Response:
+            inbound = self._inbound_request(request=request, path_params={"workspace_id": workspace_id, "upload_id": upload_id}, json_body=payload)
+            outbound = FrameworkRouteBindings.handle_confirm_file_upload(
+                request=inbound,
+                workspace_id=workspace_id,
+                upload_id=upload_id,
+                file_upload_store=self.dependencies.file_upload_store,
+            )
+            return self._framework_response(outbound)
+
+        @router.get("/api/workspaces/{workspace_id}/uploads/{upload_id}")
+        async def get_file_upload_status(request: Request, workspace_id: str, upload_id: str) -> Response:
+            inbound = self._inbound_request(request=request, path_params={"workspace_id": workspace_id, "upload_id": upload_id})
+            outbound = FrameworkRouteBindings.handle_file_upload_status(
+                request=inbound,
+                workspace_id=workspace_id,
+                upload_id=upload_id,
+                file_upload_store=self.dependencies.file_upload_store,
+            )
+            return self._framework_response(outbound)
+
         @router.post("/api/runs")
         async def launch_run(request: Request, payload: dict[str, Any] | None = Body(default=None)) -> Response:
             workspace_id = str((payload or {}).get("workspace_id") or "").strip()

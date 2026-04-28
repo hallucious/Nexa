@@ -439,6 +439,24 @@ class FrameworkRouteBindings:
             summary="Delete a bounded public share when requested by the issuing user.",
         ),
         FrameworkRouteDefinition(
+            route_name="presign_file_upload",
+            method="POST",
+            path_template="/api/workspaces/{workspace_id}/uploads/presign",
+            summary="Create an upload intent for a workspace file before document safety checks.",
+        ),
+        FrameworkRouteDefinition(
+            route_name="confirm_file_upload",
+            method="POST",
+            path_template="/api/workspaces/{workspace_id}/uploads/{upload_id}/confirm",
+            summary="Confirm a workspace file upload and run minimum document safety checks.",
+        ),
+        FrameworkRouteDefinition(
+            route_name="get_file_upload_status",
+            method="GET",
+            path_template="/api/workspaces/{workspace_id}/uploads/{upload_id}",
+            summary="Read workspace file upload lifecycle and document safety status.",
+        ),
+        FrameworkRouteDefinition(
             route_name="launch_run",
             method="POST",
             path_template="/api/runs",
