@@ -54,7 +54,7 @@ Nexa's goal: a **universal runtime for AI computation systems**.
 
 Future applications:
 
-* AI production pipelines
+* AI production execution engine
 * Multi-agent AI systems
 * Scientific AI computation frameworks
 * Large-scale AI automation environments

@@ -91,7 +91,7 @@ Interpretation:
 
 # Long-Term
 
-Nexa as a general-purpose runtime for AI computation systems — production pipelines, multi-agent systems, AI research infrastructure.
+Nexa as a general-purpose runtime for AI computation systems — production engines, multi-agent systems, AI research infrastructure.
 
 ---
 

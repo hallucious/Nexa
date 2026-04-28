@@ -177,6 +177,20 @@ class FirstSuccessStepView:
 
 
 @dataclass(frozen=True)
+class FirstSuccessDesignerProposalView:
+    visible: bool = False
+    proposal_state: str = "hidden"
+    summary: str | None = None
+    next_action_id: str | None = None
+    next_action_label: str | None = None
+    preferred_panel_id: str | None = None
+    preview_status: str | None = None
+    approval_status: str | None = None
+    commit_eligible: bool = False
+    review_complete: bool = False
+
+
+@dataclass(frozen=True)
 class FirstSuccessFlowView:
     visible: bool = False
     flow_state: str = "hidden"
@@ -189,6 +203,7 @@ class FirstSuccessFlowView:
     preferred_panel_id: str | None = None
     advanced_surfaces_unlocked: bool = True
     unlock_condition: str | None = None
+    designer_proposal: FirstSuccessDesignerProposalView = field(default_factory=FirstSuccessDesignerProposalView)
     steps: tuple[FirstSuccessStepView, ...] = ()
 
 
@@ -1110,6 +1125,125 @@ def _step_state(step_id: str, *, current_step_id: str | None, blocked_step_id: s
     return "pending"
 
 
+def _designer_first_success_proposal_view(
+    designer_vm: DesignerPanelViewModel | None,
+    *,
+    app_language: str,
+) -> FirstSuccessDesignerProposalView:
+    if designer_vm is None:
+        return FirstSuccessDesignerProposalView()
+
+    request_status = designer_vm.request_state.request_status
+    preview_status = designer_vm.preview_state.preview_status
+    approval_status = designer_vm.approval_state.approval_status
+    final_outcome = designer_vm.approval_state.final_outcome
+    commit_eligible = bool(designer_vm.approval_state.commit_eligible)
+    approved = (
+        commit_eligible
+        or final_outcome in {"approved", "approved_for_commit", "committed"}
+        or approval_status in {"approved", "approved_for_commit", "committed"}
+    )
+
+    if approved:
+        return FirstSuccessDesignerProposalView(
+            visible=True,
+            proposal_state="approved",
+            summary=ui_text(
+                "shell.first_success_flow.designer.approved",
+                app_language=app_language,
+                fallback_text="The workflow proposal is approved. Continue to the run step.",
+            ),
+            preferred_panel_id="designer",
+            preview_status=preview_status,
+            approval_status=approval_status,
+            commit_eligible=commit_eligible,
+            review_complete=True,
+        )
+
+    if preview_status == "ready":
+        if designer_vm.approval_state.unanswered_decision_count > 0:
+            summary = ui_text(
+                "shell.first_success_flow.designer.decisions_required",
+                app_language=app_language,
+                fallback_text="Review the required Designer decision before running.",
+            )
+            label = ui_text(
+                "designer.action.review_required_decision",
+                app_language=app_language,
+                fallback_text="Review decision",
+            )
+        else:
+            summary = designer_vm.preview_state.one_sentence_summary or ui_text(
+                "shell.first_success_flow.designer.preview_ready",
+                app_language=app_language,
+                fallback_text="Review the workflow preview before running.",
+            )
+            label = ui_text(
+                "designer.action.approve_for_commit",
+                app_language=app_language,
+                fallback_text="Approve workflow",
+            )
+        return FirstSuccessDesignerProposalView(
+            visible=True,
+            proposal_state="awaiting_approval",
+            summary=summary,
+            next_action_id="approve_for_commit",
+            next_action_label=label,
+            preferred_panel_id="designer",
+            preview_status=preview_status,
+            approval_status=approval_status,
+            commit_eligible=commit_eligible,
+            review_complete=False,
+        )
+
+    if designer_vm.precheck_state.overall_status in {"blocked", "fail", "failed"}:
+        return FirstSuccessDesignerProposalView(
+            visible=True,
+            proposal_state="precheck_blocked",
+            summary=designer_vm.precheck_state.top_issue_label or ui_text(
+                "shell.first_success_flow.designer.precheck_blocked",
+                app_language=app_language,
+                fallback_text="Fix the Designer precheck issue before previewing the workflow.",
+            ),
+            next_action_id="open_designer",
+            next_action_label=ui_text("beginner.onboarding.start.action", app_language=app_language, fallback_text="Open Designer"),
+            preferred_panel_id="designer",
+            preview_status=preview_status,
+            approval_status=approval_status,
+            commit_eligible=commit_eligible,
+            review_complete=False,
+        )
+
+    if (
+        request_status in {"submitted", "editing"}
+        or designer_vm.intent_state.intent_id
+        or designer_vm.patch_state.patch_id
+        or designer_vm.precheck_state.precheck_id
+    ):
+        return FirstSuccessDesignerProposalView(
+            visible=True,
+            proposal_state="preparing_preview",
+            summary=ui_text(
+                "shell.first_success_flow.designer.preparing_preview",
+                app_language=app_language,
+                fallback_text="Nexa is preparing a workflow preview. Review it before running.",
+            ),
+            next_action_id="open_designer",
+            next_action_label=ui_text("beginner.onboarding.start.action", app_language=app_language, fallback_text="Open Designer"),
+            preferred_panel_id="designer",
+            preview_status=preview_status,
+            approval_status=approval_status,
+            commit_eligible=commit_eligible,
+            review_complete=False,
+        )
+
+    return FirstSuccessDesignerProposalView(
+        preview_status=preview_status,
+        approval_status=approval_status,
+        commit_eligible=commit_eligible,
+    )
+
+
 def _first_success_flow_review(
     *,
     source,
@@ -1142,6 +1276,7 @@ def _first_success_flow_review(
     preferred_workspace_id: str | None = None
     preferred_panel_id: str | None = None
     flow_state = "in_progress"
+    designer_proposal = _designer_first_success_proposal_view(designer_vm, app_language=app_language)
 
     if first_success:
         completed_steps = {"describe_goal", "review_workflow", "run_workflow", "read_result"}
@@ -1196,6 +1331,20 @@ def _first_success_flow_review(
         preferred_panel_id = "validation"
         completed_steps = {"describe_goal"}
         flow_state = "blocked"
+    elif designer_proposal.visible and not designer_proposal.review_complete:
+        blocked_step_id = "review_workflow" if designer_proposal.proposal_state in {"precheck_blocked", "awaiting_approval"} else None
+        current_step_id = "review_workflow"
+        summary = designer_proposal.summary or ui_text(
+            "shell.first_success_flow.summary.review_designer_proposal",
+            app_language=app_language,
+            fallback_text="Review the Designer proposal before running.",
+        )
+        next_action_id = designer_proposal.next_action_id or "open_designer"
+        next_action_label = designer_proposal.next_action_label or ui_text("beginner.onboarding.start.action", app_language=app_language, fallback_text="Open Designer")
+        preferred_workspace_id = "node_configuration"
+        preferred_panel_id = designer_proposal.preferred_panel_id or "designer"
+        completed_steps = {"describe_goal"}
+        flow_state = "blocked" if blocked_step_id is not None else "in_progress"
     elif execution_vm is not None and execution_vm.waiting_feedback.visible:
         current_step_id = "run_workflow"
         summary = execution_vm.waiting_feedback.summary or ui_text(
@@ -1284,6 +1433,7 @@ def _first_success_flow_review(
         preferred_panel_id=preferred_panel_id,
         advanced_surfaces_unlocked=advanced_unlocked,
         unlock_condition="already_unlocked" if advanced_unlocked else "first_success_or_explicit_advanced_request",
+        designer_proposal=designer_proposal,
         steps=steps,
     )
 
@@ -1730,6 +1880,7 @@ __all__ = [
     "FirstSuccessPreflightBlockerView",
     "FirstSuccessPreflightView",
     "FirstSuccessStepView",
+    "FirstSuccessDesignerProposalView",
     "FirstSuccessFlowView",
     "ProductReadinessReviewView",
     "BuilderShellViewModel",

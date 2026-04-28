@@ -21,9 +21,7 @@ Core differentiators:
 
 ## 2. Primary Target
 
-The primary target is **enterprise R&D teams**.
-
-Reason: they have strong needs for reproducibility, audit logs, failure analysis, and cost control.
+The primary target is **General users**.
 
 ---
 
