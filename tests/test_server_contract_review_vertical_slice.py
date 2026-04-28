@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from src.server.contract_review_slice_runtime import contract_review_run_input_handoff_payload, contract_review_slice_payload
+from src.server.contract_review_slice_runtime import contract_review_run_input_handoff_payload, contract_review_slice_payload, contract_review_structured_result_payload
 from src.server.web_skeleton_runtime import (
     render_web_run_entry_html,
     render_web_upload_entry_html,
@@ -102,3 +102,36 @@ def test_contract_review_run_page_exposes_safe_upload_handoff_payload() -> None:
     assert "web_contract_review_slice" in html
     assert "contract_review_freelancer_v1" in html
     assert "character_offset_source_references" in html
+
+
+def test_contract_review_structured_result_payload_projects_clause_questions_and_sources() -> None:
+    payload = contract_review_structured_result_payload(
+        output_key="contract_review_result",
+        value_type="contract_review",
+        value_preview=(
+            '{'
+            '"use_case":"contract_review",'
+            '"template_id":"contract_review_freelancer_v1",'
+            '"document_reference":{"upload_id":"upload-001","extraction_id":"extract-001"},'
+            '"clauses":[{"clause_id":"payment","title":"Payment terms","risk_level":"medium",'
+            '"plain_language_explanation":"Payment timing is not explicit.",'
+            '"source_reference":{"start":120,"end":180,"label":"Section 3"}}],'
+            '"pre_signature_questions":["When is payment due?"]'
+            '}'
+        ),
+    )
+
+    assert payload is not None
+    assert payload["render_kind"] == "contract_review_structured"
+    assert payload["template_id"] == "contract_review_freelancer_v1"
+    assert payload["document_reference"] == {"upload_id": "upload-001", "extraction_id": "extract-001"}
+    assert payload["clauses"][0]["title"] == "Payment terms"
+    assert payload["clauses"][0]["risk_level"] == "medium"
+    assert payload["clauses"][0]["source_reference"] == {
+        "mode": "character_offsets",
+        "start": 120,
+        "end": 180,
+        "label": "Section 3",
+    }
+    assert payload["pre_signature_questions"] == ["When is payment due?"]
+    assert "ask_pre_signature_question" in payload["next_actions"]

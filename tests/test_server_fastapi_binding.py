@@ -3897,3 +3897,62 @@ def test_fastapi_workspace_shell_renders_first_success_flow_bridge() -> None:
     assert 'first-success-flow-summary' in body
     assert 'initialFirstSuccessFlowSection' in body
     assert 'writeFirstSuccessFlowSection' in body
+
+
+def test_fastapi_binding_workspace_result_history_renders_contract_review_structured_result() -> None:
+    contract_review_value = json.dumps(
+        {
+            "use_case": "contract_review",
+            "template_id": "contract_review_freelancer_v1",
+            "document_reference": {"upload_id": "upload-001", "extraction_id": "extract-001"},
+            "clauses": [
+                {
+                    "clause_id": "payment",
+                    "title": "Payment terms",
+                    "risk_level": "medium",
+                    "plain_language_explanation": "Payment timing is not explicit.",
+                    "source_reference": {"start": 120, "end": 180, "label": "Section 3"},
+                }
+            ],
+            "pre_signature_questions": ["When is payment due?"],
+        },
+        sort_keys=True,
+    )
+    client = _make_client(
+        workspace_result_rows={
+            'run-002': {
+                'run_id': 'run-002',
+                'workspace_id': 'ws-001',
+                'result_state': 'ready_success',
+                'final_status': 'completed',
+                'result_summary': 'Success.',
+                'updated_at': '2026-04-11T12:01:05+00:00',
+                'final_output': {
+                    'output_key': 'contract_review_result',
+                    'value_preview': contract_review_value,
+                    'value_type': 'contract_review',
+                },
+            }
+        }
+    )
+
+    api_response = client.get('/api/workspaces/ws-001/result-history?run_id=run-002', headers=_session_headers())
+    assert api_response.status_code == 200
+    payload = api_response.json()
+    structured = payload['selected_result']['contract_review_result']
+    assert structured['render_kind'] == 'contract_review_structured'
+    assert structured['document_reference']['upload_id'] == 'upload-001'
+    assert structured['clauses'][0]['title'] == 'Payment terms'
+    assert structured['clauses'][0]['source_reference']['start'] == 120
+    assert structured['pre_signature_questions'] == ['When is payment due?']
+
+    page_response = client.get('/app/workspaces/ws-001/results?run_id=run-002', headers=_session_headers())
+    assert page_response.status_code == 200
+    assert 'contract-review-structured-result' in page_response.text
+    assert 'data-render-kind="contract_review_structured"' in page_response.text
+    assert 'contract-review-clause-list' in page_response.text
+    assert 'Payment terms' in page_response.text
+    assert 'Payment timing is not explicit.' in page_response.text
+    assert 'data-source-start="120"' in page_response.text
+    assert 'contract-review-pre-signature-questions' in page_response.text
+    assert 'When is payment due?' in page_response.text

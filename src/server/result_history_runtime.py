@@ -4,6 +4,7 @@ from dataclasses import asdict
 from html import escape
 from typing import Any, Mapping, Sequence
 
+from src.server.contract_review_slice_runtime import contract_review_structured_result_payload
 from src.server.auth_models import RunAuthorizationContext, WorkspaceAuthorizationContext
 from src.server.run_list_api import RunListReadService
 from src.server.run_read_api import RunResultReadService
@@ -185,6 +186,11 @@ def build_workspace_result_history_payload(
     selected_result_payload = asdict(selected_item) if selected_item is not None else None
     if selected_result_payload is not None:
         selected_result_payload["first_artifact_ref"] = first_artifact_ref_by_run_id.get(str(selected_result_payload.get("run_id") or ""))
+        selected_result_payload["contract_review_result"] = contract_review_structured_result_payload(
+            output_key=selected_result_payload.get("output_key"),
+            value_type=selected_result_payload.get("output_value_type"),
+            value_preview=selected_result_payload.get("copy_output_text"),
+        )
     onboarding_banner = None
     if view_model.onboarding_incomplete:
         onboarding_banner = {
@@ -270,6 +276,7 @@ def render_workspace_result_history_html(payload: Mapping[str, Any]) -> str:
         </article>
         """
     selected_output_html = ""
+    contract_review_result_html = ""
     return_use_reentry_html = ""
     if selected.get("output_preview"):
         render_kind = escape(str(selected.get("result_render_kind") or "plain_text"))
@@ -289,6 +296,40 @@ def render_workspace_result_history_html(payload: Mapping[str, Any]) -> str:
         elif selected.get("output_lines") and selected.get("result_render_kind") == "list_text":
             lines_html = "".join(f'<li>{escape(str(line))}</li>' for line in selected.get("output_lines") or [])
             result_body_html = f'<ul class="list-result">{lines_html}</ul>'
+        contract_review_result = dict(selected.get("contract_review_result") or {})
+        if contract_review_result:
+            clause_cards = ""
+            for clause in contract_review_result.get("clauses") or []:
+                source = dict(clause.get("source_reference") or {})
+                source_start = escape(str(source.get("start") if source.get("start") is not None else ""))
+                source_end = escape(str(source.get("end") if source.get("end") is not None else ""))
+                source_label = escape(str(source.get("label") or ""))
+                clause_cards += (
+                    '<article class="contract-review-clause" '
+                    f'data-clause-id="{escape(str(clause.get("clause_id") or ""))}" '
+                    f'data-risk-level="{escape(str(clause.get("risk_level") or "unknown"))}" '
+                    f'data-source-start="{source_start}" data-source-end="{source_end}">'
+                    f'<h3>{escape(str(clause.get("title") or "Clause"))}</h3>'
+                    f'<p>{escape(str(clause.get("plain_language_explanation") or ""))}</p>'
+                    f'<p class="source-reference">{escape(ui_text("server.result_history.contract_review_source", app_language=app_language, fallback_text="Source"))}: {source_start}-{source_end} {source_label}</p>'
+                    '</article>'
+                )
+            question_items = "".join(
+                f'<li>{escape(str(question))}</li>'
+                for question in contract_review_result.get("pre_signature_questions") or []
+            )
+            contract_review_result_html = (
+                '<section id="contract-review-structured-result" class="selected-output" role="region" aria-labelledby="contract-review-result-title" '
+                f'data-template-id="{escape(str(contract_review_result.get("template_id") or ""))}" '
+                f'data-source-reference-mode="{escape(str(contract_review_result.get("source_reference_mode") or ""))}" '
+                'data-render-kind="contract_review_structured">'
+                f'<h2 id="contract-review-result-title">{escape(str(contract_review_result.get("title") or ui_text("server.result_history.contract_review_title", app_language=app_language, fallback_text="Contract review result")))}</h2>'
+                f'<p>{escape(str(contract_review_result.get("summary") or ""))}</p>'
+                f'<div id="contract-review-clause-list">{clause_cards}</div>'
+                f'<h3>{escape(ui_text("server.result_history.contract_review_questions", app_language=app_language, fallback_text="Questions before signing"))}</h3>'
+                f'<ul id="contract-review-pre-signature-questions">{question_items}</ul>'
+                '</section>'
+            )
         selected_output_html = (
             '<section id="beginner-result-screen" class="selected-output" role="region" aria-labelledby="selected-output-title" '
             f'data-result-render-kind="{render_kind}" data-output-key="{output_key}">'
@@ -382,6 +423,7 @@ def render_workspace_result_history_html(payload: Mapping[str, Any]) -> str:
       </header>
       {onboarding_html}
       {selected_output_html}
+      {contract_review_result_html}
       {return_use_reentry_html}
       {first_success_completion_html}
       <section class="result-grid" aria-label="{escape(ui_text('server.result_history.recent_history_aria', app_language=app_language, fallback_text='Recent result history'))}">{cards_html}</section>

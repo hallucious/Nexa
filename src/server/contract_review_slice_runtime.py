@@ -1,7 +1,8 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any
+import json
+from typing import Any, Mapping, Sequence
 from urllib.parse import quote
 
 
@@ -41,6 +42,61 @@ class ContractReviewSliceView:
             "run_href": self.run_href,
             "result_href": self.result_href,
         }
+
+@dataclass(frozen=True)
+class ContractReviewClauseView:
+    """Beginner-readable contract-review clause projection."""
+
+    clause_id: str
+    title: str
+    risk_level: str
+    plain_language_explanation: str
+    source_start: int | None = None
+    source_end: int | None = None
+    source_label: str | None = None
+
+    def as_payload(self) -> dict[str, Any]:
+        return {
+            "clause_id": self.clause_id,
+            "title": self.title,
+            "risk_level": self.risk_level,
+            "plain_language_explanation": self.plain_language_explanation,
+            "source_reference": {
+                "mode": "character_offsets",
+                "start": self.source_start,
+                "end": self.source_end,
+                "label": self.source_label,
+            },
+        }
+
+
+@dataclass(frozen=True)
+class ContractReviewStructuredResultView:
+    """Browser-facing structured contract-review result projection."""
+
+    template_id: str
+    render_kind: str
+    title: str
+    summary: str
+    document_reference: dict[str, Any]
+    clauses: tuple[ContractReviewClauseView, ...]
+    pre_signature_questions: tuple[str, ...]
+    source_reference_mode: str
+    next_actions: tuple[str, ...]
+
+    def as_payload(self) -> dict[str, Any]:
+        return {
+            "template_id": self.template_id,
+            "render_kind": self.render_kind,
+            "title": self.title,
+            "summary": self.summary,
+            "document_reference": dict(self.document_reference),
+            "clauses": [clause.as_payload() for clause in self.clauses],
+            "pre_signature_questions": list(self.pre_signature_questions),
+            "source_reference_mode": self.source_reference_mode,
+            "next_actions": list(self.next_actions),
+        }
+
 
 
 @dataclass(frozen=True)
@@ -183,11 +239,122 @@ def contract_review_run_input_handoff_payload(
     ).as_payload()
 
 
+
+def _coerce_int(value: Any) -> int | None:
+    if value in (None, ""):
+        return None
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _coerce_mapping(value: Any) -> Mapping[str, Any] | None:
+    return value if isinstance(value, Mapping) else None
+
+
+def _coerce_sequence(value: Any) -> Sequence[Any]:
+    if isinstance(value, (list, tuple)):
+        return value
+    return ()
+
+
+def _parse_structured_output_text(value: Any) -> Mapping[str, Any] | None:
+    if isinstance(value, Mapping):
+        return value
+    raw = str(value or "").strip()
+    if not raw:
+        return None
+    try:
+        parsed = json.loads(raw)
+    except json.JSONDecodeError:
+        return None
+    return parsed if isinstance(parsed, Mapping) else None
+
+
+def _is_contract_review_structured_candidate(*, output_key: Any = None, value_type: Any = None, parsed_value: Mapping[str, Any] | None = None) -> bool:
+    normalized_key = str(output_key or "").strip().lower()
+    normalized_type = str(value_type or "").strip().lower()
+    if normalized_key in {"contract_review", "contract_review_result", "contract_review_summary"}:
+        return True
+    if normalized_type in {"contract_review", "contract_review_structured", "structured_contract_review"}:
+        return True
+    if parsed_value is None:
+        return False
+    return str(parsed_value.get("use_case") or "").strip().lower() == "contract_review"
+
+
+def contract_review_structured_result_payload(
+    *,
+    output_key: Any | None = None,
+    value_type: Any | None = None,
+    value_preview: Any | None = None,
+) -> dict[str, Any] | None:
+    parsed_value = _parse_structured_output_text(value_preview)
+    if not _is_contract_review_structured_candidate(
+        output_key=output_key,
+        value_type=value_type,
+        parsed_value=parsed_value,
+    ):
+        return None
+    if parsed_value is None:
+        return None
+
+    document_reference = _coerce_mapping(parsed_value.get("document_reference")) or {}
+    clauses: list[ContractReviewClauseView] = []
+    for index, raw_clause in enumerate(_coerce_sequence(parsed_value.get("clauses") or parsed_value.get("clause_list")), start=1):
+        clause = _coerce_mapping(raw_clause)
+        if clause is None:
+            continue
+        source_ref = _coerce_mapping(clause.get("source_reference")) or {}
+        title = str(clause.get("title") or clause.get("clause_title") or f"Clause {index}").strip()
+        explanation = str(
+            clause.get("plain_language_explanation")
+            or clause.get("explanation")
+            or clause.get("summary")
+            or ""
+        ).strip()
+        if not explanation:
+            continue
+        clauses.append(
+            ContractReviewClauseView(
+                clause_id=str(clause.get("clause_id") or clause.get("id") or f"clause-{index}"),
+                title=title,
+                risk_level=str(clause.get("risk_level") or clause.get("risk") or "unknown").strip().lower() or "unknown",
+                plain_language_explanation=explanation,
+                source_start=_coerce_int(source_ref.get("start") or source_ref.get("start_offset")),
+                source_end=_coerce_int(source_ref.get("end") or source_ref.get("end_offset")),
+                source_label=str(source_ref.get("label") or source_ref.get("quote") or "").strip() or None,
+            )
+        )
+
+    questions = tuple(
+        str(item).strip()
+        for item in _coerce_sequence(parsed_value.get("pre_signature_questions"))
+        if str(item).strip()
+    )
+    view = ContractReviewStructuredResultView(
+        template_id=str(parsed_value.get("template_id") or "contract_review_freelancer_v1"),
+        render_kind="contract_review_structured",
+        title=str(parsed_value.get("title") or "Contract review result").strip(),
+        summary=str(parsed_value.get("summary") or "Review the highlighted clauses, source references, and pre-signature questions before signing.").strip(),
+        document_reference=dict(document_reference),
+        clauses=tuple(clauses),
+        pre_signature_questions=questions,
+        source_reference_mode="character_offsets",
+        next_actions=("copy_result", "continue_from_selected_result", "ask_pre_signature_question"),
+    )
+    return view.as_payload()
+
+
 __all__ = [
+    "ContractReviewClauseView",
     "ContractReviewRunInputHandoff",
+    "ContractReviewStructuredResultView",
     "ContractReviewSliceView",
     "contract_review_run_input_handoff",
     "contract_review_run_input_handoff_payload",
+    "contract_review_structured_result_payload",
     "contract_review_slice_payload",
     "contract_review_slice_view",
 ]
