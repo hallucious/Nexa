@@ -3672,3 +3672,55 @@ def test_fastapi_binding_workspace_shell_keeps_provider_setup_needed_when_requir
     assert payload['first_success_setup_section']['setup_state'] == 'provider_setup_needed'
     assert payload['server_product_readiness_review']['stages'][0]['provider_setup_reason_code'] == 'launch.provider_binding_missing'
     assert payload['server_product_readiness_review']['stages'][0]['required_provider_keys'] == ['openai']
+
+
+def test_fastapi_web_skeleton_dashboard_and_access_boundary() -> None:
+    client = _make_client()
+
+    unauth_entry = client.get("/app", follow_redirects=False)
+    assert unauth_entry.status_code == 303
+    assert unauth_entry.headers["location"].startswith("/app/sign-in")
+
+    sign_in = client.get("/app/sign-in")
+    assert sign_in.status_code == 200
+    assert "Sign in to Nexa" in sign_in.text
+    assert "access-boundary" in sign_in.text
+
+    entry = client.get("/app", headers=_session_headers(), follow_redirects=False)
+    assert entry.status_code == 303
+    assert entry.headers["location"].startswith("/app/workspaces")
+
+    dashboard = client.get("/app/workspaces", headers=_session_headers())
+    assert dashboard.status_code == 200
+    assert "workspace-dashboard" in dashboard.text
+    assert "Primary Workspace" in dashboard.text
+    assert "/app/workspaces/ws-001/upload" in dashboard.text
+    assert "/app/workspaces/ws-001/run" in dashboard.text
+    assert "/app/workspaces/ws-001/results" in dashboard.text
+
+
+def test_fastapi_web_skeleton_upload_submit_result_entry_pages() -> None:
+    client = _make_client()
+
+    upload = client.get("/app/workspaces/ws-001/upload", headers=_session_headers())
+    assert upload.status_code == 200
+    assert "upload-entry" in upload.text
+    assert "POST /api/workspaces/ws-001/uploads/presign" in upload.text
+    assert "scanning" in upload.text
+    assert "rejected" in upload.text
+    assert "safe" in upload.text
+
+    run = client.get("/app/workspaces/ws-001/run", headers=_session_headers())
+    assert run.status_code == 200
+    assert "submit-run-entry" in run.text
+    assert "POST /api/runs" in run.text
+    assert "/api/workspaces/ws-001/runs" in run.text
+    assert "result-screen-minimum" in run.text
+    assert "/app/workspaces/ws-001/results" in run.text
+
+    workspace = client.get("/app/workspaces/ws-001", headers=_session_headers())
+    assert workspace.status_code == 200
+    assert "open-upload-page" in workspace.text
+    assert "open-submit-run-page" in workspace.text
+    assert "/app/workspaces/ws-001/upload?app_language=en" in workspace.text
+    assert "/app/workspaces/ws-001/run?app_language=en" in workspace.text

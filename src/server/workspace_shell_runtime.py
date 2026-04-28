@@ -3433,6 +3433,9 @@ def build_workspace_shell_runtime_payload(
             "workspace_feedback_page": f"/app/workspaces/{workspace_id}/feedback",
             "workspace_result_history": f"/api/workspaces/{workspace_id}/result-history",
             "workspace_result_history_page": f"/app/workspaces/{workspace_id}/results?app_language={app_language}",
+            "workspace_upload_page": f"/app/workspaces/{workspace_id}/upload?app_language={app_language}",
+            "workspace_run_page": f"/app/workspaces/{workspace_id}/run?app_language={app_language}",
+            "workspace_dashboard_page": f"/app/workspaces?app_language={app_language}",
             "circuit_library": f"/api/workspaces/{workspace_id}/library",
             "circuit_library_page": f"/app/library?app_language={app_language}",
             "workspace_circuit_library_page": f"/app/workspaces/{workspace_id}/library?app_language={app_language}",
@@ -3678,6 +3681,9 @@ def render_workspace_shell_runtime_html(payload: Mapping[str, Any]) -> str:
       <button id="open-artifacts" class="secondary" {'disabled' if not latest_run_artifacts_path else ''}>{escape(ui_text("server.shell.open_latest_artifacts", app_language=app_language, fallback_text="Open latest artifacts"))}</button>
       <button id="open-workflow-library" class="secondary" {'disabled' if not routes.get('circuit_library_page') else ''}>{escape(ui_text("server.shell.open_workflow_library", app_language=app_language, fallback_text="Open workflow library"))}</button>
       <button id="open-result-history-page" class="secondary" {'disabled' if not routes.get('workspace_result_history_page') else ''}>{escape(ui_text("server.shell.open_result_history_page", app_language=app_language, fallback_text="Open result history page"))}</button>
+      <button id="open-upload-page" class="secondary" {'disabled' if not routes.get('workspace_upload_page') else ''}>{escape(ui_text("server.shell.open_upload_page", app_language=app_language, fallback_text="Upload document"))}</button>
+      <button id="open-submit-run-page" class="secondary" {'disabled' if not routes.get('workspace_run_page') else ''}>{escape(ui_text("server.shell.open_submit_run_page", app_language=app_language, fallback_text="Submit run"))}</button>
+      <button id="open-dashboard-page" class="secondary" {'disabled' if not routes.get('workspace_dashboard_page') else ''}>{escape(ui_text("server.shell.open_dashboard_page", app_language=app_language, fallback_text="Workspace dashboard"))}</button>
       <button id="open-share-history-page" class="secondary" {'disabled' if not routes.get('workspace_share_history_page') else ''}>{escape(ui_text("server.shell.open_share_history_page", app_language=app_language, fallback_text="Open share history page"))}</button>
       <button id="create-share" class="secondary" {'disabled' if not routes.get('workspace_shell_share') else ''}>{escape(ui_text("server.shell.create_share", app_language=app_language, fallback_text="Create share"))}</button>
       <button id="open-starter-template-catalog-page" class="secondary" {'disabled' if not routes.get('starter_template_catalog_page') else ''}>{escape(ui_text("server.shell.open_starter_template_catalog_page", app_language=app_language, fallback_text="Browse starter template page"))}</button>

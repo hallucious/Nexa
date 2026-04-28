@@ -24,6 +24,7 @@ from src.server.public_mcp_runtime import render_public_mcp_catalog_html
 from src.server.public_provider_runtime import render_public_provider_catalog_html
 from src.server.public_nex_runtime import render_public_nex_format_html
 from src.server.public_hub_runtime import render_public_hub_html
+from src.server.web_skeleton_runtime import render_web_sign_in_html, render_web_workspace_dashboard_html, render_web_upload_entry_html, render_web_run_entry_html
 from src.server.public_integration_runtime import render_public_integration_hub_html
 from src.server.feedback_runtime import render_workspace_feedback_html
 from src.server.run_admission_models import ExecutionTargetCatalogEntry
@@ -114,6 +115,65 @@ class FastApiRouteBindings:
 
     def build_router(self) -> APIRouter:
         router = APIRouter()
+
+        @router.get("/app")
+        async def get_web_app_entry(request: Request) -> Response:
+            app_language = str(dict(request.query_params).get("app_language") or "en")
+            if self._resolve_session_claims(request) is None:
+                return RedirectResponse(url=f"/app/sign-in?app_language={quote(app_language)}", status_code=303)
+            return RedirectResponse(url=f"/app/workspaces?app_language={quote(app_language)}", status_code=303)
+
+        @router.get("/app/sign-in")
+        async def get_web_sign_in_page(request: Request) -> Response:
+            app_language = str(dict(request.query_params).get("app_language") or "en")
+            return HTMLResponse(content=render_web_sign_in_html(app_language=app_language), status_code=200)
+
+        @router.get("/app/workspaces")
+        async def get_web_workspace_dashboard(request: Request) -> Response:
+            app_language = str(dict(request.query_params).get("app_language") or "en")
+            if self._resolve_session_claims(request) is None:
+                return RedirectResponse(url=f"/app/sign-in?app_language={quote(app_language)}", status_code=303)
+            return HTMLResponse(
+                content=render_web_workspace_dashboard_html(
+                    workspace_rows=self.dependencies.workspace_rows_provider(),
+                    app_language=app_language,
+                ),
+                status_code=200,
+            )
+
+        @router.get("/app/workspaces/{workspace_id}/upload")
+        async def get_web_upload_entry_page(request: Request, workspace_id: str) -> Response:
+            app_language = str(dict(request.query_params).get("app_language") or "en")
+            if self._resolve_session_claims(request) is None:
+                return RedirectResponse(url=f"/app/sign-in?app_language={quote(app_language)}", status_code=303)
+            workspace_row = self.dependencies.workspace_row_provider(workspace_id)
+            if workspace_row is None:
+                return JSONResponse(status_code=404, content={"status": "not_found", "workspace_id": workspace_id})
+            return HTMLResponse(
+                content=render_web_upload_entry_html(
+                    workspace_id=workspace_id,
+                    workspace_row=workspace_row,
+                    app_language=app_language,
+                ),
+                status_code=200,
+            )
+
+        @router.get("/app/workspaces/{workspace_id}/run")
+        async def get_web_run_entry_page(request: Request, workspace_id: str) -> Response:
+            app_language = str(dict(request.query_params).get("app_language") or "en")
+            if self._resolve_session_claims(request) is None:
+                return RedirectResponse(url=f"/app/sign-in?app_language={quote(app_language)}", status_code=303)
+            workspace_row = self.dependencies.workspace_row_provider(workspace_id)
+            if workspace_row is None:
+                return JSONResponse(status_code=404, content={"status": "not_found", "workspace_id": workspace_id})
+            return HTMLResponse(
+                content=render_web_run_entry_html(
+                    workspace_id=workspace_id,
+                    workspace_row=workspace_row,
+                    app_language=app_language,
+                ),
+                status_code=200,
+            )
 
         @router.get("/api/users/me/activity")
         async def get_recent_activity(request: Request, workspace_id: str | None = None, limit: int = 20, cursor: str | None = None) -> Response:
