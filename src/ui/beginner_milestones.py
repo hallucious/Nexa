@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from dataclasses import replace
 from typing import Any
 
 from src.storage.models.commit_snapshot_model import CommitSnapshotModel
@@ -19,6 +20,53 @@ def beginner_ui_metadata(source: Any) -> dict[str, Any]:
     if isinstance(source, WorkingSaveModel):
         return dict(source.ui.metadata or {})
     return {}
+
+
+
+def build_beginner_first_success_completion_metadata_patch(
+    *,
+    run_id: str | None = None,
+    output_ref: str | None = None,
+    artifact_ref: str | None = None,
+    completed_at: str | None = None,
+) -> dict[str, Any]:
+    patch: dict[str, Any] = {
+        "beginner_first_success_achieved": True,
+        "advanced_surfaces_unlocked": True,
+        "beginner_current_step": "read_result",
+    }
+    if run_id:
+        patch["beginner_first_success_run_id"] = run_id
+    if output_ref:
+        patch["beginner_first_success_output_ref"] = output_ref
+    if artifact_ref:
+        patch["beginner_first_success_artifact_ref"] = artifact_ref
+    if completed_at:
+        patch["beginner_first_success_completed_at"] = completed_at
+    return patch
+
+
+def apply_beginner_first_success_completion(
+    source: WorkingSaveModel,
+    *,
+    run_id: str | None = None,
+    output_ref: str | None = None,
+    artifact_ref: str | None = None,
+    completed_at: str | None = None,
+) -> WorkingSaveModel:
+    source = unwrap_beginner_source(source)
+    if not isinstance(source, WorkingSaveModel):
+        raise TypeError("beginner first-success completion can only be applied to a WorkingSaveModel")
+    metadata = dict(source.ui.metadata or {})
+    metadata.update(
+        build_beginner_first_success_completion_metadata_patch(
+            run_id=run_id,
+            output_ref=output_ref,
+            artifact_ref=artifact_ref,
+            completed_at=completed_at,
+        )
+    )
+    return replace(source, ui=replace(source.ui, metadata=metadata))
 
 
 def explicit_beginner_first_success_achieved(*sources: Any) -> bool:
@@ -76,6 +124,8 @@ def terminal_execution_record_view(source: Any) -> bool:
 __all__ = [
     "unwrap_beginner_source",
     "beginner_ui_metadata",
+    "build_beginner_first_success_completion_metadata_patch",
+    "apply_beginner_first_success_completion",
     "explicit_beginner_first_success_achieved",
     "explicit_advanced_surface_unlock_requested",
     "beginner_surface_active",

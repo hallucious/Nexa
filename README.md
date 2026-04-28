@@ -1,14 +1,19 @@
 # 🚦 Nexa
 
-> **Find exactly where one AI execution diverged from another.**
+> **Build, run, inspect, compare, and improve structured AI workflows.**
 
 **Status:** Early public release
 
-Nexa is a node-based runtime for AI workflows that makes execution **inspectable, comparable, replayable, and easier to debug**.
+Nexa is a traceable AI execution engine for structured AI workflows.
+It models AI work as explicit **nodes** inside dependency-driven **circuits**, so execution can be inspected, compared, replayed, debugged, and eventually productized for general users.
 
-Instead of treating AI behavior as an opaque prompt chain, Nexa treats execution as a system you can examine.
+Nexa started from a practical debugging question:
 
 > **Why did this AI execution end differently from the last one?**
+
+That remains a core use case. The broader direction is to become a reliable execution foundation for AI systems that need structure, traceability, reviewability, and operational trust.
+
+For the consolidated project vision, strategy, and roadmap, see [`ROADMAP.md`](ROADMAP.md).
 
 ---
 
@@ -63,7 +68,7 @@ When an AI workflow behaves differently from one run to the next, most teams are
 Nexa exists to answer those questions.
 
 It does **not** promise fake determinism for LLMs.
-Instead, it provides a clearer execution model so AI behavior becomes easier to inspect, compare, replay, and trust.
+Instead, it provides a clearer execution model so AI behavior becomes easier to inspect, compare, replay, review, and trust.
 
 ---
 
@@ -90,13 +95,13 @@ A node can reference:
 
 - a **prompt**
 - a **provider**
-- a **plugins**
+- one or more **plugins**
 
 around a shared working context.
 Depending on the node’s role, any of these components may be absent.
 
 That matters because Nexa does not treat an AI workflow as “call a model and wait for the result.”
-It treats each step as an explicit execution unit that can be inspected, compared, replayed, and debugged.
+It treats each step as an explicit execution unit that can be inspected, compared, replayed, debugged, and governed.
 
 ### Circuit
 
@@ -121,10 +126,12 @@ Canonical Commit Snapshots must not carry canonical UI state.
 At a practical level, Nexa gives you the pieces needed to execute, inspect, compare, and revisit AI workflows.
 
 - **node-based execution** for AI workflows
+- **dependency-driven circuit execution** instead of fixed prompt chains
 - **run-to-run diff** for outputs and state changes
 - **replay** and **audit-pack export** for investigation and review
 - **provider abstraction** across multiple model backends
 - a **savefile-first `.nex` model** for runnable AI artifacts
+- a growing **UI/editor control-plane foundation** for product-facing workflow creation and review
 
 Supported providers:
 
@@ -150,7 +157,7 @@ The current repository is best understood as:
 - **role-aware savefile/storage boundary implemented**
 - **Python-side UI/editor foundation broadly implemented**
 - **product-flow shell convergence substantially implemented**
-- **final live end-to-end proof reflected in the current shell/workflow evidence layer**
+- **live end-to-end workflow evidence reflected in the current shell/control-plane layer**
 
 In practical terms:
 
@@ -159,6 +166,13 @@ In practical terms:
 - Commit Snapshot must not carry canonical UI state
 - multilingual UI support is structurally present in the current UI layer
 - the current UI code is a strong control-plane / shell foundation, not yet a finished end-user frontend product
+
+Current active product focus:
+
+- consolidate the general-user first-success loop
+- enforce beginner-shell compression in the product-facing surface
+- connect Designer, validation, execution, and result-reading into one coherent workflow path
+- avoid adding deep architecture that does not help a general user start, understand, run, and read the result
 
 ---
 
@@ -263,26 +277,49 @@ Nexa is not:
 
 Its goal is narrower and more practical:
 
-> **make AI execution inspectable, comparable, and trustworthy enough to engineer seriously**
+> **make AI execution structured, inspectable, comparable, and trustworthy enough to engineer seriously**
 
 ---
 
-## 🌐 Vision
+## 🌐 Project direction
 
 Nexa aims to become a foundational runtime for **traceable AI computation**.
 
-The goal is not to force LLMs into fake determinism.
-The goal is to make AI systems understandable enough to debug, review, replay, and evaluate like real software systems.
+The immediate product direction is not to add every possible advanced feature.
+The immediate direction is to close the general-user first-success loop:
 
-Over time, Nexa should evolve from a debugging-oriented runtime into a more general execution foundation for AI systems that need traceability, comparison, and operational trust.
+```text
+start -> understand -> run -> read the result
+```
+
+After that loop is reliable, Nexa can expand more safely into automation, plugin building, richer UI surfaces, collaboration, and circuit evolution.
+
+For the single source of truth on Nexa’s vision, strategy, roadmap, project scope, current priorities, and deferred work, read:
+
+```text
+ROADMAP.md
+```
+
+The root documentation set is intentionally small:
+
+```text
+README.md        entry point
+ROADMAP.md       direction and scope source of truth
+ARCHITECTURE.md  architecture and execution-rule source of truth
+```
+
+`VISION.md`, `STRATEGY.md`, and `PROJECT_SCOPE.md` are absorbed into `ROADMAP.md`.
+`FOUNDATION_RULES.md` and `EXECUTION_RULES.md` are absorbed into `ARCHITECTURE.md`.
 
 ---
 
 ## 📚 Read next
 
-If you want the architecture and implementation details, continue here:
+If you want the project direction and architecture details, continue here:
 
-1. `docs/INDEX.md`
-2. `docs/BLUEPRINT.md`
-3. `docs/DEVELOPMENT.md`
-4. `docs/PROVIDER_SYSTEM.md`
+1. `ROADMAP.md`
+2. `ARCHITECTURE.md`
+3. `docs/INDEX.md`
+4. `docs/BLUEPRINT.md`
+5. `docs/DEVELOPMENT.md`
+6. `docs/PROVIDER_SYSTEM.md`

@@ -30,7 +30,7 @@ from src.ui.graph_workspace import GraphPreviewOverlay, GraphWorkspaceViewModel,
 from src.ui.inspector_panel import SelectedObjectViewModel, read_selected_object_view_model
 from src.ui.i18n import beginner_ui_text, ui_language_from_sources, ui_text
 from src.ui.beginner_surface_gate import beginner_locked_policy_surface_ids
-from src.ui.beginner_milestones import beginner_advanced_surfaces_unlocked, explicit_beginner_first_success_achieved, return_use_ready, terminal_execution_record_view
+from src.ui.beginner_milestones import beginner_advanced_surfaces_unlocked, build_beginner_first_success_completion_metadata_patch, explicit_beginner_first_success_achieved, return_use_ready, terminal_execution_record_view
 from src.ui.panel_coordination import BuilderPanelCoordinationStateView, read_panel_coordination_state
 from src.ui.top_bar import BuilderTopBarViewModel, read_builder_top_bar_view_model
 from src.ui.command_palette import CommandPaletteViewModel, read_command_palette_view_model
@@ -187,6 +187,9 @@ class FirstSuccessResultView:
     next_action_id: str | None = None
     next_action_label: str | None = None
     preferred_panel_id: str | None = None
+    completion_action_id: str | None = None
+    completion_action_label: str | None = None
+    completion_metadata_patch: dict[str, Any] = field(default_factory=dict)
     read_complete: bool = False
 
 
@@ -1169,6 +1172,22 @@ def _first_success_result_reading_view(
     ready = result.state == "ready"
     partial = result.state == "partial"
     view_state = "ready_to_read" if ready else ("partial" if partial else result.state or "available")
+    completion_patch: dict[str, Any] = {}
+    completion_action_id: str | None = None
+    completion_action_label: str | None = None
+    if ready and not first_success:
+        completion_patch = build_beginner_first_success_completion_metadata_patch(
+            run_id=execution_vm.run_identity.run_id,
+            output_ref=result.output_ref,
+            artifact_ref=result.artifact_ref,
+        )
+        completion_action_id = "mark_first_result_read"
+        completion_action_label = ui_text(
+            "builder.action.mark_first_result_read",
+            app_language=app_language,
+            fallback_text="Mark result as read",
+        )
+
     return FirstSuccessResultView(
         visible=True,
         state=("complete" if first_success and ready else view_state),
@@ -1183,6 +1202,9 @@ def _first_success_result_reading_view(
             else ui_text("builder.action.open_runtime_monitoring", app_language=app_language, fallback_text="Read result")
         ),
         preferred_panel_id=("result_history" if first_success and ready else "execution"),
+        completion_action_id=completion_action_id,
+        completion_action_label=completion_action_label,
+        completion_metadata_patch=completion_patch,
         read_complete=bool(first_success and ready),
     )
 

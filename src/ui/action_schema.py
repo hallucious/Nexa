@@ -159,6 +159,13 @@ def read_builder_action_schema(
         execution_view is not None
         and execution_view.waiting_feedback.visible
     )
+    first_result_read_completion_ready = bool(
+        source_role == "working_save"
+        and execution_view is not None
+        and execution_view.result_reading.visible
+        and execution_view.result_reading.state == "ready"
+        and not return_use_ready
+    )
 
     beginner_preunlock = beginner_deep_surface_gate_active(source)
 
@@ -376,6 +383,16 @@ def read_builder_action_schema(
                 "watch_run_progress",
                 execution_view.waiting_feedback.next_action_label or ui_text("builder.action.watch_run_progress", app_language=app_language),
                 "execution_monitoring",
+                True,
+            )
+        )
+
+    if first_result_read_completion_ready:
+        contextual_actions.append(
+            _action(
+                "mark_first_result_read",
+                ui_text("builder.action.mark_first_result_read", app_language=app_language, fallback_text="Mark result as read"),
+                "first_success",
                 True,
             )
         )

@@ -1,8 +1,8 @@
 # Nexa Roadmap
 
 Status: Official Single Source of Truth  
-Scope: Vision, strategy, roadmap, current priorities, and long-term direction  
-Supersedes: `VISION.md`, `STRATEGY.md`, and all previous standalone roadmap drafts
+Scope: Vision, strategy, roadmap, project scope, current priorities, and long-term direction  
+Supersedes: `VISION.md`, `STRATEGY.md`, `PROJECT_SCOPE.md`, and all previous standalone roadmap drafts
 
 ---
 
@@ -13,9 +13,10 @@ This document is the single authoritative direction document for Nexa.
 It replaces the previous three-document split:
 
 ```text
-VISION.md    -> absorbed into this ROADMAP.md
-STRATEGY.md  -> absorbed into this ROADMAP.md
-ROADMAP.md   -> replaced by this integrated ROADMAP.md
+VISION.md         -> absorbed into this ROADMAP.md
+STRATEGY.md       -> absorbed into this ROADMAP.md
+PROJECT_SCOPE.md  -> absorbed into this ROADMAP.md
+ROADMAP.md        -> replaced by this integrated ROADMAP.md
 ```
 
 After adopting this document, the project should keep only:
@@ -24,13 +25,13 @@ After adopting this document, the project should keep only:
 ROADMAP.md
 ```
 
-`VISION.md` and `STRATEGY.md` should be deleted rather than maintained as parallel direction documents.
+`VISION.md`, `STRATEGY.md`, and `PROJECT_SCOPE.md` should be deleted rather than maintained as parallel direction/scope documents.
 
 Reason:
 
 - Vision, strategy, and roadmap are currently tightly coupled.
 - Maintaining them separately creates document drift.
-- Future AI assistants and contributors need one clear source of truth.
+- Future AI assistants and contributors need one clear source of truth for direction and scope.
 - Volatile implementation details should live in commit notes, CI output, and handoff documents, not in multiple top-level direction files.
 
 ---
@@ -237,7 +238,98 @@ These constraints are product assets, not implementation burdens.
 
 ---
 
-## 8. Current State Snapshot
+
+## 8. Project Scope
+
+This section replaces the previous standalone `PROJECT_SCOPE.md`.
+
+### What Nexa is
+
+Nexa is a traceable AI execution engine with a product shell for building, running, inspecting, and improving structured AI workflows.
+
+Internally, Nexa models workflows as **circuits**: dependency graphs of nodes. Beginner-facing UI may display circuits as **workflows**, but the canonical engine/spec term remains **circuit**.
+
+Nexa focuses on:
+
+- node-based AI execution
+- dependency-driven circuit runtime
+- traceable AI computation
+- reproducible and inspectable execution where possible
+- append-only artifacts and execution records
+- contract-driven reliability
+- provider and plugin extensibility under explicit boundaries
+- general-user productization through a first-success loop
+
+### What Nexa is not
+
+Nexa is not:
+
+- a generic automation tool
+- a chatbot framework
+- a model training framework
+- a fixed pipeline orchestrator
+- an unrestricted plugin marketplace
+- a cloud infrastructure product by default
+- a promise of deterministic LLM outputs
+
+Nexa may later support automation triggers, external delivery, SaaS deployment, collaboration, plugin ecosystems, or evolution systems. Those are scoped extensions, not replacements for the core execution engine.
+
+### Core responsibilities
+
+The project includes:
+
+- circuit-based AI workflow execution
+- node-based execution with dependency scheduling
+- Working Context-based resource interaction
+- provider abstraction
+- plugin execution under namespace and runtime controls
+- prompt/resource management
+- artifact management
+- execution trace recording
+- run comparison and diff
+- replay/audit evidence where possible
+- validation and policy gating
+- role-aware savefile/storage lifecycle
+- UI adapter/view model and product-shell foundations
+- beginner/advanced presentation boundaries
+- Designer proposal workflow boundaries
+- documentation/spec synchronization
+
+### Current active scope
+
+The current active scope is **general-user productization**.
+
+The immediate product goal is to close the first-success loop:
+
+```text
+start -> understand -> run -> read the result
+```
+
+This includes:
+
+- beginner shell enforcement
+- Designer-first empty workspace behavior
+- beginner terminology and i18n completeness
+- validation compression into status, one-sentence cause, and next action
+- guided provider/API access paths
+- template/gallery support where appropriate
+- execution feedback and result-reading flow
+- clear separation between validation blockage and execution failure
+- progressive unlock of advanced graph/trace/diff/history surfaces
+
+This does not change engine truth. It changes how the product exposes the engine to general users.
+
+### Scoped extension areas
+
+The following are in scope as governed extension areas, but they must not displace the first-success loop:
+
+- Product Shell and UI: adapter/view-model, Graph/Inspector/Validation/Execution/Designer surfaces, beginner/advanced shell behavior, accessibility, localization, onboarding, result reading.
+- Designer AI: proposal-producing design assistance governed by `Intent -> Patch -> Precheck -> Preview -> Approval -> Commit`.
+- Plugin Builder: governed plugin proposal, validation, verification, registration, loading, execution binding, observability, governance, and lifecycle management.
+- Automation and Delivery: explicit trigger and delivery rules that preserve execution, artifact, trace, quota, and safety boundaries.
+- Evolution / Experimentation: long-term scope for benchmarked, policy-bounded circuit evaluation and improvement.
+
+## 9. Current State Snapshot
 
 Nexa has completed substantial engine, storage, validation, trace, and UI foundation work.
 
@@ -260,7 +352,7 @@ Current interpretation:
 
 ---
 
-## 9. Current Strategic Priority
+## 10. Current Strategic Priority
 
 ### Priority 1 — First-Success Loop Closure
 
@@ -345,7 +437,7 @@ The current UI priority is enforcement and integration, not more speculative UI 
 
 ---
 
-## 10. Active Roadmap
+## 11. Active Roadmap
 
 ### Phase A — General-User First-Success Closure
 
@@ -537,7 +629,7 @@ not through uncontrolled runtime self-modification.
 
 ---
 
-## 11. Historical Foundation Work
+## 12. Historical Foundation Work
 
 This section preserves the completed or substantially closed foundation work.
 
@@ -624,7 +716,7 @@ The current work is to convert that structure into reliable first-success produc
 
 ---
 
-## 12. Deferred / Guarded Work
+## 13. Deferred / Guarded Work
 
 The following should not displace first-success closure:
 
@@ -644,7 +736,7 @@ It means they are not the current strategic bottleneck.
 
 ---
 
-## 13. Current-Stage Non-Priorities
+## 14. Current-Stage Non-Priorities
 
 The current stage should not prioritize:
 
@@ -657,7 +749,7 @@ The current stage should not prioritize:
 
 ---
 
-## 14. Success Criteria
+## 15. Success Criteria
 
 The roadmap is working when a general user can complete this sequence without expert assistance:
 
@@ -685,7 +777,7 @@ Those concepts may become visible later, but they should not be mandatory for fi
 
 ---
 
-## 15. Baseline Tracking Policy
+## 16. Baseline Tracking Policy
 
 This roadmap should avoid embedding volatile commit hashes and test counts as permanent roadmap truth.
 
@@ -710,7 +802,7 @@ It should not become a stale changelog.
 
 ---
 
-## 16. Update Policy
+## 17. Update Policy
 
 This document should be updated when one of the following changes:
 
@@ -725,7 +817,7 @@ This document should not be updated for every commit, test count, local patch, o
 
 ---
 
-## 17. Final Direction
+## 18. Final Direction
 
 Nexa should become a general-purpose runtime and product platform for AI computation systems:
 
