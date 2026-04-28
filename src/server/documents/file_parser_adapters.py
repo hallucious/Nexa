@@ -57,6 +57,10 @@ def _decode_pdf_literal(value: str) -> str:
 def extract_text_from_pdf_bytes(document_bytes: bytes) -> DocumentTextExtractionResult:
     if not document_bytes.startswith(b"%PDF"):
         raise ValueError("file_extraction.parser.pdf_magic_mismatch")
+    if b"/Encrypt" in document_bytes[:4096] or b"/Encrypt" in document_bytes:
+        raise ValueError("file_extraction.parser.pdf_encrypted_or_protected")
+    if b"%%EOF" not in document_bytes:
+        raise ValueError("file_extraction.parser.pdf_eof_missing")
     raw = document_bytes.decode("latin-1", errors="ignore")
     literal_chunks = [_decode_pdf_literal(item) for item in re.findall(r"\(([^()]*)\)\s*(?:Tj|'|\")", raw)]
     if not literal_chunks:
