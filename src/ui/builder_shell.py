@@ -140,6 +140,31 @@ class ProductSurfaceStageView:
 
 
 @dataclass(frozen=True)
+class FirstSuccessPreflightBlockerView:
+    family: str
+    reason_code: str
+    message: str
+    next_action: str
+    severity: str = "blocking"
+    source_ref: str | None = None
+
+
+@dataclass(frozen=True)
+class FirstSuccessPreflightView:
+    visible: bool = False
+    ready: bool = True
+    blocker_count: int = 0
+    warning_count: int = 0
+    top_family: str | None = None
+    top_reason_code: str | None = None
+    cause: str | None = None
+    next_action: str | None = None
+    estimated_total_cost_ratio: float | None = None
+    blockers: tuple[FirstSuccessPreflightBlockerView, ...] = ()
+    warnings: tuple[FirstSuccessPreflightBlockerView, ...] = ()
+
+
+@dataclass(frozen=True)
 class ProductReadinessReviewView:
     review_state: str = "hold_first_success_setup"
     review_label: str | None = None
@@ -183,6 +208,7 @@ class BuilderShellViewModel:
     feedback_channel: FeedbackChannelViewModel | None = None
     workspace_chain: WorkspaceChainReviewView = field(default_factory=WorkspaceChainReviewView)
     product_readiness: ProductReadinessReviewView = field(default_factory=ProductReadinessReviewView)
+    first_success_preflight: FirstSuccessPreflightView = field(default_factory=FirstSuccessPreflightView)
     layout: BuilderShellLayoutView = field(default_factory=BuilderShellLayoutView)
     diagnostics: BuilderShellDiagnosticsView = field(default_factory=BuilderShellDiagnosticsView)
     beginner_onboarding: BeginnerOnboardingHintView = field(default_factory=BeginnerOnboardingHintView)
@@ -635,6 +661,111 @@ def _workspace_chain_review(*, storage_role: str, shell_mode: str, visual_editor
     )
 
 
+def _payload_from_first_success_preflight(first_success_preflight: Any | None) -> dict[str, Any] | None:
+    if first_success_preflight is None:
+        return None
+    if hasattr(first_success_preflight, "to_payload"):
+        payload = first_success_preflight.to_payload()
+    elif isinstance(first_success_preflight, dict):
+        payload = dict(first_success_preflight)
+    else:
+        payload = {
+            "ready": getattr(first_success_preflight, "ready", True),
+            "blockers": getattr(first_success_preflight, "blockers", ()),
+            "warnings": getattr(first_success_preflight, "warnings", ()),
+            "estimated_total_cost_ratio": getattr(first_success_preflight, "estimated_total_cost_ratio", None),
+        }
+    return dict(payload)
+
+
+def _blocker_payload(blocker: Any) -> dict[str, Any]:
+    if hasattr(blocker, "to_payload"):
+        return dict(blocker.to_payload())
+    if isinstance(blocker, dict):
+        return dict(blocker)
+    return {
+        "family": getattr(blocker, "family", ""),
+        "reason_code": getattr(blocker, "reason_code", ""),
+        "message": getattr(blocker, "message", ""),
+        "next_action": getattr(blocker, "next_action", ""),
+        "severity": getattr(blocker, "severity", "blocking"),
+        "source_ref": getattr(blocker, "source_ref", None),
+    }
+
+
+def _first_success_preflight_view(first_success_preflight: Any | None) -> FirstSuccessPreflightView:
+    payload = _payload_from_first_success_preflight(first_success_preflight)
+    if payload is None:
+        return FirstSuccessPreflightView()
+
+    blockers: list[FirstSuccessPreflightBlockerView] = []
+    for raw in payload.get("blockers") or ():
+        item = _blocker_payload(raw)
+        family = str(item.get("family") or "").strip()
+        reason_code = str(item.get("reason_code") or "").strip()
+        message = str(item.get("message") or "").strip()
+        next_action = str(item.get("next_action") or "").strip()
+        if not (family and reason_code and message and next_action):
+            continue
+        blockers.append(
+            FirstSuccessPreflightBlockerView(
+                family=family,
+                reason_code=reason_code,
+                message=message,
+                next_action=next_action,
+                severity=str(item.get("severity") or "blocking").strip() or "blocking",
+                source_ref=(str(item.get("source_ref")) if item.get("source_ref") is not None else None),
+            )
+        )
+
+    warnings: list[FirstSuccessPreflightBlockerView] = []
+    for raw in payload.get("warnings") or ():
+        item = _blocker_payload(raw)
+        family = str(item.get("family") or "").strip()
+        reason_code = str(item.get("reason_code") or "").strip()
+        message = str(item.get("message") or "").strip()
+        next_action = str(item.get("next_action") or "").strip()
+        if not (family and reason_code and message and next_action):
+            continue
+        warnings.append(
+            FirstSuccessPreflightBlockerView(
+                family=family,
+                reason_code=reason_code,
+                message=message,
+                next_action=next_action,
+                severity=str(item.get("severity") or "warning").strip() or "warning",
+                source_ref=(str(item.get("source_ref")) if item.get("source_ref") is not None else None),
+            )
+        )
+
+    top = blockers[0] if blockers else (warnings[0] if warnings else None)
+    estimated_total_cost_ratio = payload.get("estimated_total_cost_ratio")
+    return FirstSuccessPreflightView(
+        visible=True,
+        ready=bool(payload.get("ready", not blockers)),
+        blocker_count=len(blockers),
+        warning_count=len(warnings),
+        top_family=(top.family if top is not None else None),
+        top_reason_code=(top.reason_code if top is not None else None),
+        cause=(top.message if top is not None else None),
+        next_action=(top.next_action if top is not None else None),
+        estimated_total_cost_ratio=(float(estimated_total_cost_ratio) if isinstance(estimated_total_cost_ratio, (int, float)) else None),
+        blockers=tuple(blockers),
+        warnings=tuple(warnings),
+    )
+
+
+def _first_success_preflight_action(preflight: FirstSuccessPreflightView, *, app_language: str) -> tuple[str | None, str | None]:
+    family = preflight.top_family
+    if family == "provider":
+        return "open_provider_setup", preflight.next_action or ui_text("builder.action.open_provider_setup", app_language=app_language, fallback_text="Connect AI model")
+    if family in {"file_upload", "file_extraction"}:
+        return "open_file_input", preflight.next_action or ui_text("builder.action.open_file_input", app_language=app_language, fallback_text="Fix file input")
+    if family:
+        return "open_node_configuration", preflight.next_action or ui_text("builder.action.open_node_configuration", app_language=app_language, fallback_text="Open step settings")
+    return None, None
+
+
 def _product_stage(*, stage_id: str, stage_label: str | None, stage_state: str, blocker_count: int, pending_count: int, summary: str | None, recommended_action_id: str | None, recommended_action_label: str | None, preferred_workspace_id: str | None, preferred_panel_id: str | None, app_language: str) -> ProductSurfaceStageView:
     return ProductSurfaceStageView(
         stage_id=stage_id,
@@ -665,7 +796,7 @@ def _run_action_enabled(execution_vm: ExecutionPanelViewModel | None) -> bool:
     return any(action.action_id == "run" and action.enabled for action in execution_vm.control_state.available_actions)
 
 
-def _product_readiness_review(*, source, execution_record: ExecutionRecordModel | None, beginner_mode: bool, empty_workspace_mode: bool, designer_vm: DesignerPanelViewModel | None, validation_vm: ValidationPanelViewModel | None, execution_vm: ExecutionPanelViewModel | None, circuit_library_vm: CircuitLibraryViewModel | None, result_history_vm: ResultHistoryViewModel | None, feedback_channel_vm: FeedbackChannelViewModel | None, contextual_help: ContextualHelpView, privacy_transparency: PrivacyTransparencyView, mobile_first_run: MobileFirstRunView, app_language: str) -> ProductReadinessReviewView:
+def _product_readiness_review(*, source, execution_record: ExecutionRecordModel | None, beginner_mode: bool, empty_workspace_mode: bool, designer_vm: DesignerPanelViewModel | None, validation_vm: ValidationPanelViewModel | None, execution_vm: ExecutionPanelViewModel | None, circuit_library_vm: CircuitLibraryViewModel | None, result_history_vm: ResultHistoryViewModel | None, feedback_channel_vm: FeedbackChannelViewModel | None, contextual_help: ContextualHelpView, privacy_transparency: PrivacyTransparencyView, mobile_first_run: MobileFirstRunView, first_success_preflight: FirstSuccessPreflightView, app_language: str) -> ProductReadinessReviewView:
     first_success = _first_success_achieved(source=source, execution_record=execution_record, execution_vm=execution_vm)
 
     provider_setup_needed = bool(designer_vm is not None and designer_vm.provider_setup_guidance.visible and not designer_vm.provider_inline_key_entry.has_connected_provider)
@@ -722,7 +853,13 @@ def _product_readiness_review(*, source, execution_record: ExecutionRecordModel 
         app_language=app_language,
     )
 
-    if validation_vm is not None and validation_vm.overall_status == "blocked":
+    if first_success_preflight.visible and not first_success_preflight.ready:
+        run_state = "fix_before_run"
+        run_blockers = max(first_success_preflight.blocker_count, 1)
+        run_pending = 0
+        run_summary = first_success_preflight.cause or ui_text("shell.product_readiness.summary.first_success_preflight_blocked", app_language=app_language, fallback_text="Resolve the provider or file blocker before the first run can continue.")
+        run_action_id, run_action_label = _first_success_preflight_action(first_success_preflight, app_language=app_language)
+    elif validation_vm is not None and validation_vm.overall_status == "blocked":
         run_state = "fix_before_run"
         run_blockers = 1
         run_pending = 0
@@ -751,7 +888,14 @@ def _product_readiness_review(*, source, execution_record: ExecutionRecordModel 
         run_state = "ready_to_run"
         run_blockers = 0
         run_pending = 1
-        run_summary = (execution_vm.cost_visibility.summary if execution_vm is not None and execution_vm.cost_visibility.visible and execution_vm.cost_visibility.summary else None) or ui_text("shell.product_readiness.summary.ready_to_run", app_language=app_language, fallback_text="The workflow is ready enough to run. Review the expected usage, then launch it and read the result.")
+        cost_summary = None
+        if first_success_preflight.visible and first_success_preflight.estimated_total_cost_ratio is not None:
+            cost_summary = ui_text(
+                "shell.product_readiness.summary.first_success_cost_estimate",
+                app_language=app_language,
+                fallback_text=f"Estimated provider cost ratio: {first_success_preflight.estimated_total_cost_ratio:g}.",
+            )
+        run_summary = cost_summary or (execution_vm.cost_visibility.summary if execution_vm is not None and execution_vm.cost_visibility.visible and execution_vm.cost_visibility.summary else None) or ui_text("shell.product_readiness.summary.ready_to_run", app_language=app_language, fallback_text="The workflow is ready enough to run. Review the expected usage, then launch it and read the result.")
         run_action_id = "run_current"
         run_action_label = ui_text("builder.action.run_current", app_language=app_language, fallback_text="Run current")
     elif first_success:
@@ -786,8 +930,12 @@ def _product_readiness_review(*, source, execution_record: ExecutionRecordModel 
         summary=run_summary,
         recommended_action_id=run_action_id,
         recommended_action_label=run_action_label,
-        preferred_workspace_id="runtime_monitoring" if run_action_id in {"run_current", "open_runtime_monitoring", "open_result_history"} else "node_configuration",
-        preferred_panel_id="execution" if run_action_id in {"run_current", "open_runtime_monitoring"} else "result_history",
+        preferred_workspace_id=("runtime_monitoring" if run_action_id in {"run_current", "open_runtime_monitoring", "open_result_history"} else "node_configuration"),
+        preferred_panel_id=(
+            "execution"
+            if run_action_id in {"run_current", "open_runtime_monitoring"}
+            else ("result_history" if run_action_id == "open_result_history" else "designer")
+        ),
         app_language=app_language,
     )
 
@@ -968,6 +1116,7 @@ def read_builder_shell_view_model(
     session_keys: dict | None = None,
     app_language: str | None = None,
     selected_action_id: str | None = None,
+    first_success_preflight=None,
 ) -> BuilderShellViewModel:
     source_unwrapped = _unwrap(source)
     role = _storage_role(source_unwrapped)
@@ -1226,6 +1375,7 @@ def read_builder_shell_view_model(
         execution_view=execution_vm,
         app_language=app_language,
     )
+    first_success_preflight_vm = _first_success_preflight_view(first_success_preflight)
     workspace_chain_vm = _workspace_chain_review(
         storage_role=role,
         shell_mode=shell_mode,
@@ -1248,6 +1398,7 @@ def read_builder_shell_view_model(
         contextual_help=contextual_help,
         privacy_transparency=privacy_transparency,
         mobile_first_run=mobile_first_run,
+        first_success_preflight=first_success_preflight_vm,
         app_language=app_language,
     )
 
@@ -1280,6 +1431,7 @@ def read_builder_shell_view_model(
         feedback_channel=feedback_channel_vm,
         workspace_chain=workspace_chain_vm,
         product_readiness=product_readiness_vm,
+        first_success_preflight=first_success_preflight_vm,
         layout=layout_vm,
         diagnostics=diagnostics,
         beginner_onboarding=beginner_onboarding,
@@ -1299,6 +1451,8 @@ __all__ = [
     "WorkspaceChainStageView",
     "WorkspaceChainReviewView",
     "ProductSurfaceStageView",
+    "FirstSuccessPreflightBlockerView",
+    "FirstSuccessPreflightView",
     "ProductReadinessReviewView",
     "BuilderShellViewModel",
     "read_builder_shell_view_model",
