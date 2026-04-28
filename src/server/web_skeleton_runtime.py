@@ -1,10 +1,11 @@
 from __future__ import annotations
 
 from html import escape
+import json
 from typing import Any, Mapping, Sequence
 
 from src.ui.i18n import normalize_ui_language, ui_text
-from src.server.contract_review_slice_runtime import contract_review_slice_payload
+from src.server.contract_review_slice_runtime import contract_review_run_input_handoff_payload, contract_review_slice_payload
 
 
 def _workspace_title(row: Mapping[str, Any]) -> str:
@@ -173,6 +174,10 @@ def render_web_run_entry_html(
     workspace_id: str,
     workspace_row: Mapping[str, Any] | None = None,
     app_language: str = "en",
+    use_case: str | None = None,
+    upload_id: str | None = None,
+    upload_status: str | None = None,
+    extraction_id: str | None = None,
 ) -> str:
     app_language = normalize_ui_language(app_language)
     workspace_title = _workspace_title(workspace_row or {"workspace_id": workspace_id})
@@ -180,6 +185,16 @@ def render_web_run_entry_html(
     contract_review = contract_review_slice_payload(workspace_id=workspace_id, app_language=app_language)
     output_contract = ", ".join(str(item) for item in contract_review['output_contract'])
     next_actions = ", ".join(str(item) for item in contract_review['next_actions'])
+    contract_review_handoff = contract_review_run_input_handoff_payload(
+        workspace_id=workspace_id,
+        app_language=app_language,
+        upload_id=upload_id,
+        upload_status=upload_status,
+        extraction_id=extraction_id,
+    )
+    contract_review_handoff_json = json.dumps(contract_review_handoff["run_submission_payload"], ensure_ascii=False, sort_keys=True)
+    contract_review_ready = "true" if contract_review_handoff["ready_for_run"] else "false"
+    contract_review_blocked_reason = str(contract_review_handoff.get("blocked_reason") or "")
     body = f"""
     <h1>{escape(title)}</h1>
     <p><strong>{escape(workspace_title)}</strong></p>
@@ -190,6 +205,27 @@ def render_web_run_entry_html(
         <li>{escape(ui_text("web.run.step.poll", app_language=app_language, fallback_text="Poll workspace runs or run status."))} <code>/api/workspaces/{escape(workspace_id)}/runs</code></li>
         <li>{escape(ui_text("web.run.step.result", app_language=app_language, fallback_text="Read the result."))} <code>/app/workspaces/{escape(workspace_id)}/results</code></li>
       </ol>
+      <section
+        id="contract-review-run-input-handoff"
+        class="card"
+        aria-label="Contract review run input handoff"
+        data-use-case="contract_review"
+        data-upload-id="{escape(str(contract_review_handoff.get('upload_id') or ''))}"
+        data-upload-status="{escape(str(contract_review_handoff['upload_status']))}"
+        data-extraction-id="{escape(str(contract_review_handoff.get('extraction_id') or ''))}"
+        data-required-upload-state="{escape(str(contract_review_handoff['required_upload_state']))}"
+        data-ready-for-run="{contract_review_ready}"
+        data-blocked-reason="{escape(contract_review_blocked_reason)}"
+      >
+        <h2>Contract review input handoff</h2>
+        <p>Use a safe uploaded contract as the document input for this review run.</p>
+        <ul>
+          <li>Upload status: <code>{escape(str(contract_review_handoff['upload_status']))}</code></li>
+          <li>Required status: <code>{escape(str(contract_review_handoff['required_upload_state']))}</code></li>
+          <li>Ready for run: <code>{contract_review_ready}</code></li>
+        </ul>
+        <pre id="contract-review-run-input-payload" aria-label="Contract review run input payload">{escape(contract_review_handoff_json)}</pre>
+      </section>
       <form
         id="run-submit-form"
         class="card"

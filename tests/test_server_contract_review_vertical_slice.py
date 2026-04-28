@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from src.server.contract_review_slice_runtime import contract_review_slice_payload
+from src.server.contract_review_slice_runtime import contract_review_run_input_handoff_payload, contract_review_slice_payload
 from src.server.web_skeleton_runtime import (
     render_web_run_entry_html,
     render_web_upload_entry_html,
@@ -48,3 +48,57 @@ def test_contract_review_slice_is_visible_from_dashboard_upload_and_run_pages() 
     assert "data-source-reference-mode=\"character_offsets\"" in run_html
     assert "plain_language_explanations" in run_html
     assert "character_offset_source_references" in run_html
+
+
+def test_contract_review_run_input_handoff_requires_safe_upload() -> None:
+    blocked = contract_review_run_input_handoff_payload(
+        workspace_id="ws-001",
+        app_language="en",
+        upload_id="upload-001",
+        upload_status="scanning",
+    )
+
+    assert blocked["use_case"] == "contract_review"
+    assert blocked["ready_for_run"] is False
+    assert blocked["blocked_reason"] == "contract_review.upload_not_safe"
+    assert blocked["run_submission_payload"]["input_payload"]["document_reference"]["upload_status"] == "scanning"
+
+    ready = contract_review_run_input_handoff_payload(
+        workspace_id="ws-001",
+        app_language="en",
+        upload_id="upload-001",
+        upload_status="safe",
+        extraction_id="extract-001",
+    )
+
+    assert ready["ready_for_run"] is True
+    assert ready["blocked_reason"] is None
+    assert ready["run_submission_payload"]["workspace_id"] == "ws-001"
+    assert ready["run_submission_payload"]["input_payload"]["run_intent"] == "contract_review"
+    assert ready["run_submission_payload"]["input_payload"]["document_reference"] == {
+        "upload_id": "upload-001",
+        "upload_status": "safe",
+        "extraction_id": "extract-001",
+        "required_upload_state": "safe",
+    }
+    assert "clause_list" in ready["run_submission_payload"]["input_payload"]["output_contract"]
+
+
+def test_contract_review_run_page_exposes_safe_upload_handoff_payload() -> None:
+    html = render_web_run_entry_html(
+        workspace_id="ws-001",
+        app_language="en",
+        use_case="contract_review",
+        upload_id="upload-001",
+        upload_status="safe",
+        extraction_id="extract-001",
+    )
+
+    assert "contract-review-run-input-handoff" in html
+    assert 'data-upload-id="upload-001"' in html
+    assert 'data-upload-status="safe"' in html
+    assert 'data-extraction-id="extract-001"' in html
+    assert 'data-ready-for-run="true"' in html
+    assert "web_contract_review_slice" in html
+    assert "contract_review_freelancer_v1" in html
+    assert "character_offset_source_references" in html

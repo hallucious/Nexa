@@ -3861,6 +3861,16 @@ def test_fastapi_web_skeleton_upload_submit_result_entry_pages() -> None:
     assert "data-shell-draft-path=\"/api/workspaces/ws-001/shell/draft\"" in run.text
     assert "/app/workspaces/ws-001/results?app_language=en" in run.text
 
+    contract_run = client.get("/app/workspaces/ws-001/run?app_language=en&use_case=contract_review&upload_id=upload-001&upload_status=safe&extraction_id=extract-001", headers=_session_headers())
+    assert contract_run.status_code == 200
+    assert "contract-review-run-input-handoff" in contract_run.text
+    assert "data-upload-id=\"upload-001\"" in contract_run.text
+    assert "data-upload-status=\"safe\"" in contract_run.text
+    assert "data-extraction-id=\"extract-001\"" in contract_run.text
+    assert "data-ready-for-run=\"true\"" in contract_run.text
+    assert "web_contract_review_slice" in contract_run.text
+    assert "contract_review_freelancer_v1" in contract_run.text
+
     workspace = client.get("/app/workspaces/ws-001", headers=_session_headers())
     assert workspace.status_code == 200
     assert "open-upload-page" in workspace.text

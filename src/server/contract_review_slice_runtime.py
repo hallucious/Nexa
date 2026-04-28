@@ -43,6 +43,43 @@ class ContractReviewSliceView:
         }
 
 
+@dataclass(frozen=True)
+class ContractReviewRunInputHandoff:
+    """Browser-facing safe-upload to contract-review run input handoff."""
+
+    use_case: str
+    template_id: str
+    workspace_id: str
+    upload_id: str | None
+    upload_status: str
+    extraction_id: str | None
+    required_upload_state: str
+    ready_for_run: bool
+    blocked_reason: str | None
+    run_submission_payload: dict[str, Any]
+
+    def as_payload(self) -> dict[str, Any]:
+        return {
+            "use_case": self.use_case,
+            "template_id": self.template_id,
+            "workspace_id": self.workspace_id,
+            "upload_id": self.upload_id,
+            "upload_status": self.upload_status,
+            "extraction_id": self.extraction_id,
+            "required_upload_state": self.required_upload_state,
+            "ready_for_run": self.ready_for_run,
+            "blocked_reason": self.blocked_reason,
+            "run_submission_payload": self.run_submission_payload,
+        }
+
+
+def _optional_text(value: Any) -> str | None:
+    if value is None:
+        return None
+    normalized = str(value).strip()
+    return normalized or None
+
+
 def contract_review_slice_view(*, workspace_id: str, app_language: str = "en") -> ContractReviewSliceView:
     safe_workspace_id = quote(str(workspace_id), safe="")
     safe_language = quote(str(app_language or "en"), safe="")
@@ -68,4 +105,89 @@ def contract_review_slice_payload(*, workspace_id: str, app_language: str = "en"
     return contract_review_slice_view(workspace_id=workspace_id, app_language=app_language).as_payload()
 
 
-__all__ = ["ContractReviewSliceView", "contract_review_slice_payload", "contract_review_slice_view"]
+def contract_review_run_input_handoff(
+    *,
+    workspace_id: str,
+    app_language: str = "en",
+    upload_id: Any | None = None,
+    upload_status: Any | None = None,
+    extraction_id: Any | None = None,
+) -> ContractReviewRunInputHandoff:
+    slice_view = contract_review_slice_view(workspace_id=workspace_id, app_language=app_language)
+    normalized_upload_id = _optional_text(upload_id)
+    normalized_extraction_id = _optional_text(extraction_id)
+    normalized_upload_status = (_optional_text(upload_status) or "unknown").lower()
+    ready_for_run = bool(normalized_upload_id) and normalized_upload_status == slice_view.required_upload_state
+    blocked_reason = None
+    if not normalized_upload_id:
+        blocked_reason = "contract_review.upload_required"
+    elif normalized_upload_status != slice_view.required_upload_state:
+        blocked_reason = "contract_review.upload_not_safe"
+    run_submission_payload = {
+        "workspace_id": str(workspace_id),
+        "execution_target": {
+            "target_type": "approved_snapshot",
+            "target_ref": "latest",
+        },
+        "input_payload": {
+            "run_intent": slice_view.run_intent,
+            "use_case": "contract_review",
+            "template_id": slice_view.template_id,
+            "document_reference": {
+                "upload_id": normalized_upload_id,
+                "upload_status": normalized_upload_status,
+                "extraction_id": normalized_extraction_id,
+                "required_upload_state": slice_view.required_upload_state,
+            },
+            "output_contract": list(slice_view.output_contract),
+            "source_reference_mode": slice_view.source_reference_mode,
+        },
+        "launch_options": {
+            "launch_source": "web_contract_review_slice",
+            "model_tier": slice_view.default_model_tier,
+        },
+        "client_context": {
+            "surface": "web_run_entry",
+            "use_case": "contract_review",
+            "ready_for_run": ready_for_run,
+        },
+    }
+    return ContractReviewRunInputHandoff(
+        use_case="contract_review",
+        template_id=slice_view.template_id,
+        workspace_id=str(workspace_id),
+        upload_id=normalized_upload_id,
+        upload_status=normalized_upload_status,
+        extraction_id=normalized_extraction_id,
+        required_upload_state=slice_view.required_upload_state,
+        ready_for_run=ready_for_run,
+        blocked_reason=blocked_reason,
+        run_submission_payload=run_submission_payload,
+    )
+
+
+def contract_review_run_input_handoff_payload(
+    *,
+    workspace_id: str,
+    app_language: str = "en",
+    upload_id: Any | None = None,
+    upload_status: Any | None = None,
+    extraction_id: Any | None = None,
+) -> dict[str, Any]:
+    return contract_review_run_input_handoff(
+        workspace_id=workspace_id,
+        app_language=app_language,
+        upload_id=upload_id,
+        upload_status=upload_status,
+        extraction_id=extraction_id,
+    ).as_payload()
+
+
+__all__ = [
+    "ContractReviewRunInputHandoff",
+    "ContractReviewSliceView",
+    "contract_review_run_input_handoff",
+    "contract_review_run_input_handoff_payload",
+    "contract_review_slice_payload",
+    "contract_review_slice_view",
+]

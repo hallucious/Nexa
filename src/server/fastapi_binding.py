@@ -160,7 +160,8 @@ class FastApiRouteBindings:
 
         @router.get("/app/workspaces/{workspace_id}/run")
         async def get_web_run_entry_page(request: Request, workspace_id: str) -> Response:
-            app_language = str(dict(request.query_params).get("app_language") or "en")
+            query_params = dict(request.query_params)
+            app_language = str(query_params.get("app_language") or "en")
             if self._resolve_session_claims(request) is None:
                 return RedirectResponse(url=f"/app/sign-in?app_language={quote(app_language)}", status_code=303)
             workspace_row = self.dependencies.workspace_row_provider(workspace_id)
@@ -171,6 +172,10 @@ class FastApiRouteBindings:
                     workspace_id=workspace_id,
                     workspace_row=workspace_row,
                     app_language=app_language,
+                    use_case=str(query_params.get("use_case") or ""),
+                    upload_id=str(query_params.get("upload_id") or "") or None,
+                    upload_status=str(query_params.get("upload_status") or "") or None,
+                    extraction_id=str(query_params.get("extraction_id") or "") or None,
                 ),
                 status_code=200,
             )
