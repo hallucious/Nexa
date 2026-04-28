@@ -100,6 +100,57 @@ class ContractReviewStructuredResultView:
 
 
 @dataclass(frozen=True)
+class ContractReviewNextActionView:
+    """Browser-facing next-action projection for structured contract-review results."""
+
+    action_id: str
+    action_kind: str
+    label: str
+    href: str | None = None
+    copy_text: str | None = None
+    question_id: str | None = None
+    question: str | None = None
+    prompt_text: str | None = None
+
+    def as_payload(self) -> dict[str, Any]:
+        payload: dict[str, Any] = {
+            "action_id": self.action_id,
+            "action_kind": self.action_kind,
+            "label": self.label,
+        }
+        if self.href:
+            payload["href"] = self.href
+        if self.copy_text:
+            payload["copy_text"] = self.copy_text
+        if self.question_id:
+            payload["question_id"] = self.question_id
+        if self.question:
+            payload["question"] = self.question
+        if self.prompt_text:
+            payload["prompt_text"] = self.prompt_text
+        return payload
+
+
+@dataclass(frozen=True)
+class ContractReviewNextActionPanelView:
+    """Browser-facing next-action panel for contract-review result follow-through."""
+
+    title: str
+    summary: str
+    actions: tuple[ContractReviewNextActionView, ...]
+    question_actions: tuple[ContractReviewNextActionView, ...]
+
+    def as_payload(self) -> dict[str, Any]:
+        return {
+            "title": self.title,
+            "summary": self.summary,
+            "actions": [action.as_payload() for action in self.actions],
+            "question_actions": [action.as_payload() for action in self.question_actions],
+        }
+
+
+
+@dataclass(frozen=True)
 class ContractReviewRunInputHandoff:
     """Browser-facing safe-upload to contract-review run input handoff."""
 
@@ -347,12 +398,111 @@ def contract_review_structured_result_payload(
     return view.as_payload()
 
 
+def _contract_review_copy_text(result_payload: Mapping[str, Any]) -> str:
+    title = str(result_payload.get("title") or "Contract review result").strip()
+    lines = [title]
+    summary = str(result_payload.get("summary") or "").strip()
+    if summary:
+        lines.extend(("", summary))
+    clauses = result_payload.get("clauses") if isinstance(result_payload.get("clauses"), Sequence) else ()
+    for raw_clause in clauses or ():
+        clause = _coerce_mapping(raw_clause)
+        if clause is None:
+            continue
+        clause_title = str(clause.get("title") or "Clause").strip()
+        risk = str(clause.get("risk_level") or "unknown").strip()
+        explanation = str(clause.get("plain_language_explanation") or "").strip()
+        lines.extend(("", f"Clause: {clause_title}", f"Risk: {risk}"))
+        if explanation:
+            lines.append(f"Explanation: {explanation}")
+        source = _coerce_mapping(clause.get("source_reference")) or {}
+        start = source.get("start")
+        end = source.get("end")
+        label = str(source.get("label") or "").strip()
+        if start is not None or end is not None or label:
+            lines.append(f"Source: {start if start is not None else ''}-{end if end is not None else ''} {label}".strip())
+    questions = result_payload.get("pre_signature_questions") if isinstance(result_payload.get("pre_signature_questions"), Sequence) else ()
+    clean_questions = [str(question).strip() for question in questions or () if str(question).strip()]
+    if clean_questions:
+        lines.extend(("", "Questions before signing:"))
+        lines.extend(f"- {question}" for question in clean_questions)
+    return "\n".join(lines).strip()
+
+
+def contract_review_next_action_panel_payload(
+    *,
+    workspace_id: str,
+    run_id: Any | None,
+    output_ref: Any | None = None,
+    contract_review_result: Mapping[str, Any] | None = None,
+    app_language: str = "en",
+) -> dict[str, Any] | None:
+    if not contract_review_result:
+        return None
+    safe_workspace_id = quote(str(workspace_id), safe="")
+    safe_language = quote(str(app_language or "en"), safe="")
+    safe_run_id = quote(str(run_id or ""), safe="")
+    safe_output_ref = quote(str(output_ref or "contract_review_result"), safe="")
+    workspace_href = (
+        f"/app/workspaces/{safe_workspace_id}?app_language={safe_language}"
+        f"&return_use=contract_review_result&run_id={safe_run_id}&output_ref={safe_output_ref}"
+    )
+    copy_action = ContractReviewNextActionView(
+        action_id="copy_contract_review_result",
+        action_kind="copy_output",
+        label="Copy contract review",
+        copy_text=_contract_review_copy_text(contract_review_result),
+    )
+    continue_action = ContractReviewNextActionView(
+        action_id="continue_from_contract_review_result",
+        action_kind="return_use_reentry",
+        label="Continue from this review",
+        href=workspace_href,
+    )
+    question_actions: list[ContractReviewNextActionView] = []
+    questions = contract_review_result.get("pre_signature_questions")
+    if isinstance(questions, Sequence):
+        for index, raw_question in enumerate(questions, start=1):
+            question = str(raw_question).strip()
+            if not question:
+                continue
+            question_id = f"question-{index}"
+            safe_question_id = quote(question_id, safe="")
+            prompt_text = f"Answer this pre-signature contract question using the selected contract review result: {question}"
+            href = (
+                f"/app/workspaces/{safe_workspace_id}?app_language={safe_language}"
+                f"&return_use=contract_review_question&run_id={safe_run_id}"
+                f"&output_ref={safe_output_ref}&question_id={safe_question_id}"
+            )
+            question_actions.append(
+                ContractReviewNextActionView(
+                    action_id=f"ask_pre_signature_question_{index}",
+                    action_kind="designer_followup",
+                    label="Ask this question",
+                    href=href,
+                    question_id=question_id,
+                    question=question,
+                    prompt_text=prompt_text,
+                )
+            )
+    panel = ContractReviewNextActionPanelView(
+        title="Next actions",
+        summary="Copy the review, continue the workflow, or ask one of the pre-signature questions.",
+        actions=(copy_action, continue_action),
+        question_actions=tuple(question_actions),
+    )
+    return panel.as_payload()
+
+
 __all__ = [
     "ContractReviewClauseView",
+    "ContractReviewNextActionPanelView",
+    "ContractReviewNextActionView",
     "ContractReviewRunInputHandoff",
     "ContractReviewStructuredResultView",
     "ContractReviewSliceView",
     "contract_review_run_input_handoff",
+    "contract_review_next_action_panel_payload",
     "contract_review_run_input_handoff_payload",
     "contract_review_structured_result_payload",
     "contract_review_slice_payload",

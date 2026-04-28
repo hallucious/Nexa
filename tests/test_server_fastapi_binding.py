@@ -3956,3 +3956,11 @@ def test_fastapi_binding_workspace_result_history_renders_contract_review_struct
     assert 'data-source-start="120"' in page_response.text
     assert 'contract-review-pre-signature-questions' in page_response.text
     assert 'When is payment due?' in page_response.text
+    assert 'contract-review-next-actions' in page_response.text
+    assert 'id="copy_contract_review_result"' in page_response.text
+    assert 'id="continue_from_contract_review_result"' in page_response.text
+    assert 'return_use=contract_review_result' in page_response.text
+    assert 'contract-review-question-actions' in page_response.text
+    assert 'data-question-id="question-1"' in page_response.text
+    assert 'id="ask_pre_signature_question_1"' in page_response.text
+    assert 'return_use=contract_review_question' in page_response.text

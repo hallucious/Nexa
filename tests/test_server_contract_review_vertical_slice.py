@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from src.server.contract_review_slice_runtime import contract_review_run_input_handoff_payload, contract_review_slice_payload, contract_review_structured_result_payload
+from src.server.contract_review_slice_runtime import contract_review_next_action_panel_payload, contract_review_run_input_handoff_payload, contract_review_slice_payload, contract_review_structured_result_payload
 from src.server.web_skeleton_runtime import (
     render_web_run_entry_html,
     render_web_upload_entry_html,
@@ -135,3 +135,40 @@ def test_contract_review_structured_result_payload_projects_clause_questions_and
     }
     assert payload["pre_signature_questions"] == ["When is payment due?"]
     assert "ask_pre_signature_question" in payload["next_actions"]
+
+
+def test_contract_review_next_action_panel_preserves_copy_continue_and_question_actions() -> None:
+    structured = contract_review_structured_result_payload(
+        output_key="contract_review_result",
+        value_type="contract_review",
+        value_preview=(
+            '{'
+            '"use_case":"contract_review",'
+            '"template_id":"contract_review_freelancer_v1",'
+            '"document_reference":{"upload_id":"upload-001","extraction_id":"extract-001"},'
+            '"clauses":[{"clause_id":"payment","title":"Payment terms","risk_level":"medium",'
+            '"plain_language_explanation":"Payment timing is not explicit.",'
+            '"source_reference":{"start":120,"end":180,"label":"Section 3"}}],'
+            '"pre_signature_questions":["When is payment due?"]'
+            '}'
+        ),
+    )
+
+    panel = contract_review_next_action_panel_payload(
+        workspace_id="ws-001",
+        run_id="run-002",
+        output_ref="contract_review_result",
+        contract_review_result=structured,
+        app_language="en",
+    )
+
+    assert panel is not None
+    assert panel["actions"][0]["action_id"] == "copy_contract_review_result"
+    assert panel["actions"][0]["action_kind"] == "copy_output"
+    assert "Payment timing is not explicit." in panel["actions"][0]["copy_text"]
+    assert panel["actions"][1]["action_id"] == "continue_from_contract_review_result"
+    assert "return_use=contract_review_result" in panel["actions"][1]["href"]
+    assert panel["question_actions"][0]["question_id"] == "question-1"
+    assert panel["question_actions"][0]["action_kind"] == "designer_followup"
+    assert "return_use=contract_review_question" in panel["question_actions"][0]["href"]
+    assert "When is payment due?" in panel["question_actions"][0]["prompt_text"]

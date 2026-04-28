@@ -4,7 +4,7 @@ from dataclasses import asdict
 from html import escape
 from typing import Any, Mapping, Sequence
 
-from src.server.contract_review_slice_runtime import contract_review_structured_result_payload
+from src.server.contract_review_slice_runtime import contract_review_next_action_panel_payload, contract_review_structured_result_payload
 from src.server.auth_models import RunAuthorizationContext, WorkspaceAuthorizationContext
 from src.server.run_list_api import RunListReadService
 from src.server.run_read_api import RunResultReadService
@@ -186,11 +186,21 @@ def build_workspace_result_history_payload(
     selected_result_payload = asdict(selected_item) if selected_item is not None else None
     if selected_result_payload is not None:
         selected_result_payload["first_artifact_ref"] = first_artifact_ref_by_run_id.get(str(selected_result_payload.get("run_id") or ""))
-        selected_result_payload["contract_review_result"] = contract_review_structured_result_payload(
+        contract_review_result = contract_review_structured_result_payload(
             output_key=selected_result_payload.get("output_key"),
             value_type=selected_result_payload.get("output_value_type"),
             value_preview=selected_result_payload.get("copy_output_text"),
         )
+        if contract_review_result is not None:
+            contract_review_result = dict(contract_review_result)
+            contract_review_result["next_action_panel"] = contract_review_next_action_panel_payload(
+                workspace_id=response.workspace_id,
+                run_id=selected_result_payload.get("run_id"),
+                output_ref=selected_result_payload.get("output_key"),
+                contract_review_result=contract_review_result,
+                app_language=app_language,
+            )
+        selected_result_payload["contract_review_result"] = contract_review_result
     onboarding_banner = None
     if view_model.onboarding_incomplete:
         onboarding_banner = {
@@ -318,6 +328,44 @@ def render_workspace_result_history_html(payload: Mapping[str, Any]) -> str:
                 f'<li>{escape(str(question))}</li>'
                 for question in contract_review_result.get("pre_signature_questions") or []
             )
+            action_panel = dict(contract_review_result.get("next_action_panel") or {})
+            action_buttons = ""
+            for action in action_panel.get("actions") or []:
+                action_id = escape(str(action.get("action_id") or ""))
+                label = escape(str(action.get("label") or ""))
+                action_kind = escape(str(action.get("action_kind") or ""))
+                if action.get("copy_text"):
+                    action_buttons += (
+                        f'<button id="{action_id}" type="button" data-action-kind="{action_kind}" '
+                        f'data-copy-output="{escape(str(action.get("copy_text") or ""), quote=True)}">{label}</button>'
+                    )
+                elif action.get("href"):
+                    action_buttons += (
+                        f'<a id="{action_id}" class="action-link" data-action-kind="{action_kind}" '
+                        f'href="{escape(str(action.get("href") or "#"))}">{label}</a>'
+                    )
+            question_action_items = ""
+            for action in action_panel.get("question_actions") or []:
+                question_action_items += (
+                    '<li class="contract-review-question-action" '
+                    f'data-question-id="{escape(str(action.get("question_id") or ""))}" '
+                    f'data-action-kind="{escape(str(action.get("action_kind") or ""))}" '
+                    f'data-prompt-text="{escape(str(action.get("prompt_text") or ""), quote=True)}">'
+                    f'<span>{escape(str(action.get("question") or ""))}</span>'
+                    f'<a id="{escape(str(action.get("action_id") or ""))}" class="action-link secondary" '
+                    f'href="{escape(str(action.get("href") or "#"))}">{escape(str(action.get("label") or ""))}</a>'
+                    '</li>'
+                )
+            next_action_panel_html = ""
+            if action_buttons or question_action_items:
+                next_action_panel_html = (
+                    '<section id="contract-review-next-actions" class="contract-review-next-actions" role="region" aria-labelledby="contract-review-next-actions-title">'
+                    f'<h3 id="contract-review-next-actions-title">{escape(ui_text("server.result_history.contract_review_actions_title", app_language=app_language, fallback_text="Next actions"))}</h3>'
+                    f'<p>{escape(ui_text("server.result_history.contract_review_actions_summary", app_language=app_language, fallback_text="Copy the review, continue the workflow, or ask one of the pre-signature questions."))}</p>'
+                    f'<div class="actions">{action_buttons}</div>'
+                    f'<ul id="contract-review-question-actions">{question_action_items}</ul>'
+                    '</section>'
+                )
             contract_review_result_html = (
                 '<section id="contract-review-structured-result" class="selected-output" role="region" aria-labelledby="contract-review-result-title" '
                 f'data-template-id="{escape(str(contract_review_result.get("template_id") or ""))}" '
@@ -328,6 +376,7 @@ def render_workspace_result_history_html(payload: Mapping[str, Any]) -> str:
                 f'<div id="contract-review-clause-list">{clause_cards}</div>'
                 f'<h3>{escape(ui_text("server.result_history.contract_review_questions", app_language=app_language, fallback_text="Questions before signing"))}</h3>'
                 f'<ul id="contract-review-pre-signature-questions">{question_items}</ul>'
+                f'{next_action_panel_html}'
                 '</section>'
             )
         selected_output_html = (

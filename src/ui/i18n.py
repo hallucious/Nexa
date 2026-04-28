@@ -3129,3 +3129,13 @@ _TRANSLATIONS["ko"].update({
     "feedback.option.bug_report.title": "버그 신고 바로가기",
     "feedback.option.bug_report.summary": "예상하지 못한 실패나 깨진 동작을 신고하세요.",
 })
+
+_TRANSLATIONS["en"].update({
+    "server.result_history.contract_review_actions_title": "Next actions",
+    "server.result_history.contract_review_actions_summary": "Copy the review, continue the workflow, or ask one of the pre-signature questions.",
+})
+
+_TRANSLATIONS["ko"].update({
+    "server.result_history.contract_review_actions_title": "다음 행동",
+    "server.result_history.contract_review_actions_summary": "검토 결과를 복사하거나, 워크플로우를 계속하거나, 서명 전 질문을 이어서 물어볼 수 있습니다.",
+})
