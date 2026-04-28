@@ -204,6 +204,8 @@ def test_framework_binding_exposes_expected_route_definitions() -> None:
         "presign_file_upload",
         "confirm_file_upload",
         "get_file_upload_status",
+        "request_file_extraction",
+        "get_file_extraction_status",
         "launch_run",
         "get_run_status",
         "get_run_result",

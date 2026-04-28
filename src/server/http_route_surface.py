@@ -87,6 +87,8 @@ from src.ui.i18n import normalize_ui_language, ui_text
 from src.designer.proposal_flow import get_starter_circuit_template, list_starter_circuit_templates
 from src.server.documents.file_ingestion_api import FileIngestionService, response_to_payload
 from src.server.documents.file_ingestion_models import FileUploadConfirmRequest, FileUploadPresignRequest
+from src.server.documents.file_extraction_api import FileExtractionService, response_to_payload as extraction_response_to_payload
+from src.server.documents.file_extraction_models import FileExtractionRequest
 
 
 def _to_jsonable(value: Any) -> Any:
@@ -2294,6 +2296,8 @@ class RunHttpRouteSurface:
         ("presign_file_upload", "POST", "/api/workspaces/{workspace_id}/uploads/presign"),
         ("confirm_file_upload", "POST", "/api/workspaces/{workspace_id}/uploads/{upload_id}/confirm"),
         ("get_file_upload_status", "GET", "/api/workspaces/{workspace_id}/uploads/{upload_id}"),
+        ("request_file_extraction", "POST", "/api/workspaces/{workspace_id}/uploads/{upload_id}/extractions"),
+        ("get_file_extraction_status", "GET", "/api/workspaces/{workspace_id}/extractions/{extraction_id}"),
         ("launch_run", "POST", "/api/runs"),
         ("get_run_status", "GET", "/api/runs/{run_id}"),
         ("get_run_result", "GET", "/api/runs/{run_id}/result"),
@@ -5485,6 +5489,74 @@ class RunHttpRouteSurface:
         return _route_response(200, payload)
 
 
+
+    @staticmethod
+    def _parse_file_extraction_request(http_request: HttpRouteRequest, *, workspace_id: str, upload_id: str) -> FileExtractionRequest:
+        body = http_request.json_body or {}
+        if not isinstance(body, Mapping):
+            raise ValueError("file_extraction.request_body_invalid")
+        request_auth = _request_auth(http_request)
+        request_metadata = body.get("request_metadata") or body.get("metadata") or {}
+        return FileExtractionRequest(
+            workspace_id=workspace_id,
+            upload_id=upload_id,
+            requested_by_user_ref=request_auth.requested_by_user_ref,
+            request_metadata=request_metadata if isinstance(request_metadata, Mapping) else {},
+        )
+
+    @classmethod
+    def handle_request_file_extraction(
+        cls,
+        *,
+        http_request: HttpRouteRequest,
+        workspace_id: str,
+        upload_id: str,
+        file_upload_store,
+        file_extraction_store,
+    ) -> HttpRouteResponse:
+        expected_path = f"/api/workspaces/{workspace_id}/uploads/{upload_id}/extractions"
+        if http_request.method != "POST":
+            return _route_response(405, {"error_family": "route_error", "reason_code": "route.method_not_allowed", "message": "File extraction request route only supports POST."})
+        if http_request.path.rstrip("/") != expected_path:
+            return _route_response(404, {"error_family": "route_error", "reason_code": "route.not_found", "message": "Requested route was not found."})
+        request_auth = _request_auth(http_request)
+        if not request_auth.is_authenticated or not request_auth.requested_by_user_ref:
+            return _route_response(401, {"status": "rejected", "error_family": "product_rejection", "reason_code": "file_extraction.authentication_required", "message": "Authenticated file extraction request is required."})
+        try:
+            extraction_request = cls._parse_file_extraction_request(http_request, workspace_id=workspace_id, upload_id=upload_id)
+        except Exception as exc:  # noqa: BLE001
+            return _route_response(400, {"status": "rejected", "error_family": "product_rejection", "reason_code": getattr(exc, "args", ["file_extraction.invalid_request"])[0] or "file_extraction.invalid_request", "message": "File extraction request payload is invalid.", "workspace_id": workspace_id, "upload_id": upload_id})
+        response = FileExtractionService.request_extraction(
+            extraction_request,
+            upload_store=file_upload_store,
+            extraction_store=file_extraction_store,
+        )
+        payload = extraction_response_to_payload(response)
+        if payload.get("status") == "rejected":
+            payload["error_family"] = "product_rejection"
+            return _route_response(_reason_to_status_code(str(payload.get("reason_code") or "file_extraction.rejected")), payload)
+        return _route_response(202 if payload.get("status") in {"queued", "extracting"} else 200, payload)
+
+    @classmethod
+    def handle_file_extraction_status(
+        cls,
+        *,
+        http_request: HttpRouteRequest,
+        workspace_id: str,
+        extraction_id: str,
+        file_extraction_store,
+    ) -> HttpRouteResponse:
+        expected_path = f"/api/workspaces/{workspace_id}/extractions/{extraction_id}"
+        if http_request.method != "GET":
+            return _route_response(405, {"error_family": "route_error", "reason_code": "route.method_not_allowed", "message": "File extraction status route only supports GET."})
+        if http_request.path.rstrip("/") != expected_path:
+            return _route_response(404, {"error_family": "route_error", "reason_code": "route.not_found", "message": "Requested route was not found."})
+        response = FileExtractionService.status(workspace_id=workspace_id, extraction_id=extraction_id, extraction_store=file_extraction_store)
+        payload = extraction_response_to_payload(response)
+        if payload.get("status") == "rejected" and payload.get("reason_code") == "file_extraction.not_found":
+            payload["error_family"] = "product_rejection"
+            return _route_response(404, payload)
+        return _route_response(200, payload)
     @classmethod
     def handle_launch(
         cls,

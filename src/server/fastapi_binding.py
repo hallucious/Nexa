@@ -2986,6 +2986,29 @@ class FastApiRouteBindings:
             )
             return self._framework_response(outbound)
 
+
+        @router.post("/api/workspaces/{workspace_id}/uploads/{upload_id}/extractions")
+        async def request_file_extraction(request: Request, workspace_id: str, upload_id: str, payload: dict[str, Any] | None = Body(default=None)) -> Response:
+            inbound = self._inbound_request(request=request, path_params={"workspace_id": workspace_id, "upload_id": upload_id}, json_body=payload)
+            outbound = FrameworkRouteBindings.handle_request_file_extraction(
+                request=inbound,
+                workspace_id=workspace_id,
+                upload_id=upload_id,
+                file_upload_store=self.dependencies.file_upload_store,
+                file_extraction_store=self.dependencies.file_extraction_store,
+            )
+            return self._framework_response(outbound)
+
+        @router.get("/api/workspaces/{workspace_id}/extractions/{extraction_id}")
+        async def get_file_extraction_status(request: Request, workspace_id: str, extraction_id: str) -> Response:
+            inbound = self._inbound_request(request=request, path_params={"workspace_id": workspace_id, "extraction_id": extraction_id})
+            outbound = FrameworkRouteBindings.handle_file_extraction_status(
+                request=inbound,
+                workspace_id=workspace_id,
+                extraction_id=extraction_id,
+                file_extraction_store=self.dependencies.file_extraction_store,
+            )
+            return self._framework_response(outbound)
         @router.post("/api/runs")
         async def launch_run(request: Request, payload: dict[str, Any] | None = Body(default=None)) -> Response:
             workspace_id = str((payload or {}).get("workspace_id") or "").strip()

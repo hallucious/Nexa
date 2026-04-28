@@ -366,3 +366,48 @@ def test_run_admission_allows_extracted_document_text_refs() -> None:
     assert outcome.accepted is True
     assert outcome.accepted_response is not None
     assert outcome.accepted_response.run_id == "run-extracted-1"
+
+
+def test_file_extraction_http_routes_request_and_status() -> None:
+    import json
+
+    from src.server.http_route_models import HttpRouteRequest
+    from src.server.http_route_surface import RunHttpRouteSurface
+
+    upload_store = _safe_upload_store()
+    extraction_store = InMemoryFileExtractionStore()
+    headers = {
+        "x-nexa-session-claims": json.dumps({"user_ref": "user_1", "role_refs": ["editor"]}),
+    }
+
+    requested = RunHttpRouteSurface.handle_request_file_extraction(
+        http_request=HttpRouteRequest(
+            method="POST",
+            path="/api/workspaces/ws_1/uploads/upl_1/extractions",
+            headers=headers,
+            json_body={"request_metadata": {"source": "unit"}},
+        ),
+        workspace_id="ws_1",
+        upload_id="upl_1",
+        file_upload_store=upload_store,
+        file_extraction_store=extraction_store,
+    )
+
+    assert requested.status_code == 202
+    assert requested.body["status"] == "queued"
+    extraction_id = requested.body["extraction"]["extraction_id"]
+
+    status = RunHttpRouteSurface.handle_file_extraction_status(
+        http_request=HttpRouteRequest(
+            method="GET",
+            path=f"/api/workspaces/ws_1/extractions/{extraction_id}",
+            headers=headers,
+        ),
+        workspace_id="ws_1",
+        extraction_id=extraction_id,
+        file_extraction_store=extraction_store,
+    )
+
+    assert status.status_code == 200
+    assert status.body["status"] == "queued"
+    assert status.body["extraction"]["upload_id"] == "upl_1"

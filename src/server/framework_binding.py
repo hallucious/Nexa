@@ -457,6 +457,18 @@ class FrameworkRouteBindings:
             summary="Read workspace file upload lifecycle and document safety status.",
         ),
         FrameworkRouteDefinition(
+            route_name="request_file_extraction",
+            method="POST",
+            path_template="/api/workspaces/{workspace_id}/uploads/{upload_id}/extractions",
+            summary="Request document text extraction for a safe workspace upload.",
+        ),
+        FrameworkRouteDefinition(
+            route_name="get_file_extraction_status",
+            method="GET",
+            path_template="/api/workspaces/{workspace_id}/extractions/{extraction_id}",
+            summary="Read workspace file extraction lifecycle and text artifact status.",
+        ),
+        FrameworkRouteDefinition(
             route_name="launch_run",
             method="POST",
             path_template="/api/runs",
@@ -2208,6 +2220,42 @@ class FrameworkRouteBindings:
         return cls.to_framework_response(response)
 
 
+
+    @classmethod
+    def handle_request_file_extraction(
+        cls,
+        *,
+        request: FrameworkInboundRequest,
+        workspace_id: str,
+        upload_id: str,
+        file_upload_store,
+        file_extraction_store,
+    ) -> FrameworkOutboundResponse:
+        response = RunHttpRouteSurface.handle_request_file_extraction(
+            http_request=cls.to_http_route_request(request),
+            workspace_id=workspace_id,
+            upload_id=upload_id,
+            file_upload_store=file_upload_store,
+            file_extraction_store=file_extraction_store,
+        )
+        return cls.to_framework_response(response)
+
+    @classmethod
+    def handle_file_extraction_status(
+        cls,
+        *,
+        request: FrameworkInboundRequest,
+        workspace_id: str,
+        extraction_id: str,
+        file_extraction_store,
+    ) -> FrameworkOutboundResponse:
+        response = RunHttpRouteSurface.handle_file_extraction_status(
+            http_request=cls.to_http_route_request(request),
+            workspace_id=workspace_id,
+            extraction_id=extraction_id,
+            file_extraction_store=file_extraction_store,
+        )
+        return cls.to_framework_response(response)
     @classmethod
     def handle_launch(
         cls,
