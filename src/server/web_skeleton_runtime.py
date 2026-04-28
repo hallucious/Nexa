@@ -4,6 +4,7 @@ from html import escape
 from typing import Any, Mapping, Sequence
 
 from src.ui.i18n import normalize_ui_language, ui_text
+from src.server.contract_review_slice_runtime import contract_review_slice_payload
 
 
 def _workspace_title(row: Mapping[str, Any]) -> str:
@@ -79,6 +80,7 @@ def render_web_workspace_dashboard_html(
           <a class="button secondary" href="/app/workspaces/{escape(workspace_id)}/upload?app_language={escape(app_language)}">Upload document</a>
           <a class="button secondary" href="/app/workspaces/{escape(workspace_id)}/run?app_language={escape(app_language)}">Submit run</a>
           <a class="button secondary" href="/app/workspaces/{escape(workspace_id)}/results?app_language={escape(app_language)}">Results</a>
+          <a class="button secondary" href="/app/workspaces/{escape(workspace_id)}/run?app_language={escape(app_language)}&amp;use_case=contract_review">Contract review</a>
         </div>
       </article>
 """
@@ -111,6 +113,9 @@ def render_web_upload_entry_html(
     app_language = normalize_ui_language(app_language)
     workspace_title = _workspace_title(workspace_row or {"workspace_id": workspace_id})
     title = ui_text("web.upload.title", app_language=app_language, fallback_text="Upload document")
+    contract_review = contract_review_slice_payload(workspace_id=workspace_id, app_language=app_language)
+    accepted_file_types = ", ".join(str(item) for item in contract_review['accepted_file_types'])
+    output_contract = ", ".join(str(item) for item in contract_review['output_contract'])
     body = f"""
     <h1>{escape(title)}</h1>
     <p><strong>{escape(workspace_title)}</strong></p>
@@ -138,6 +143,21 @@ def render_web_upload_entry_html(
         </ul>
         <pre id="upload-status-output" aria-live="polite">{escape(ui_text("web.upload.status.pending", app_language=app_language, fallback_text="No upload status yet."))}</pre>
       </section>
+      <section
+        id="contract-review-upload-readiness"
+        class="card"
+        aria-label="Contract review upload readiness"
+        data-template-id="{escape(str(contract_review['template_id']))}"
+        data-use-case="contract_review"
+        data-required-upload-state="{escape(str(contract_review['required_upload_state']))}"
+        data-accepted-file-types="{escape(accepted_file_types)}"
+        data-output-contract="{escape(output_contract)}"
+      >
+        <h2>Contract review starter path</h2>
+        <p>{escape(str(contract_review['summary']))}</p>
+        <p>Accepted files: <strong>{escape(accepted_file_types)}</strong>. Run remains gated until upload status is <code>{escape(str(contract_review['required_upload_state']))}</code>.</p>
+      </section>
+
       <div class="actions">
         <a class="button" href="/app/workspaces/{escape(workspace_id)}?app_language={escape(app_language)}">Back to workspace</a>
         <a id="upload-run-gate" class="button secondary" aria-disabled="true" data-requires-upload-status="safe" href="/app/workspaces/{escape(workspace_id)}/run?app_language={escape(app_language)}">Continue to run</a>
@@ -157,6 +177,9 @@ def render_web_run_entry_html(
     app_language = normalize_ui_language(app_language)
     workspace_title = _workspace_title(workspace_row or {"workspace_id": workspace_id})
     title = ui_text("web.run.title", app_language=app_language, fallback_text="Submit run")
+    contract_review = contract_review_slice_payload(workspace_id=workspace_id, app_language=app_language)
+    output_contract = ", ".join(str(item) for item in contract_review['output_contract'])
+    next_actions = ", ".join(str(item) for item in contract_review['next_actions'])
     body = f"""
     <h1>{escape(title)}</h1>
     <p><strong>{escape(workspace_title)}</strong></p>
@@ -201,6 +224,26 @@ def render_web_run_entry_html(
         <h2>{escape(ui_text("web.run.result_handoff.title", app_language=app_language, fallback_text="Result handoff"))}</h2>
         <p>{escape(ui_text("web.run.result_handoff.summary", app_language=app_language, fallback_text="Open the result page, read the selected output, then mark the first result as read through UI-owned Working Save metadata."))}</p>
       </section>
+      <section
+        id="contract-review-vertical-slice"
+        class="card"
+        aria-label="Contract review vertical slice"
+        data-template-id="{escape(str(contract_review['template_id']))}"
+        data-run-intent="{escape(str(contract_review['run_intent']))}"
+        data-default-model-tier="{escape(str(contract_review['default_model_tier']))}"
+        data-source-reference-mode="{escape(str(contract_review['source_reference_mode']))}"
+        data-output-contract="{escape(output_contract)}"
+        data-next-actions="{escape(next_actions)}"
+      >
+        <h2>Contract review run path</h2>
+        <p>{escape(str(contract_review['summary']))}</p>
+        <ol>
+          <li>Use only uploads whose status is <code>{escape(str(contract_review['required_upload_state']))}</code>.</li>
+          <li>Run intent: <code>{escape(str(contract_review['run_intent']))}</code> on the <code>{escape(str(contract_review['default_model_tier']))}</code> model tier.</li>
+          <li>Return structured clauses, explanations, questions, and <code>{escape(str(contract_review['source_reference_mode']))}</code>.</li>
+        </ol>
+      </section>
+
       <div id="result-screen-minimum" class="card">
         <h2>{escape(ui_text("web.result.minimum.title", app_language=app_language, fallback_text="Result screen minimum"))}</h2>
         <p>{escape(ui_text("web.result.minimum.summary", app_language=app_language, fallback_text="The result page must show completed, running, failed, and empty states without exposing raw internals."))}</p>
