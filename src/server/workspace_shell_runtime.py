@@ -1225,6 +1225,31 @@ def _first_success_run_section(
         current_step_id = "read_result"
         next_step_id = None
         _append_control("first-success-run-open-result", ui_text("server.shell.open_result", app_language=app_language, fallback_text="Open Result"), "runtime.result")
+        draft_write_target = str(routes.get("workspace_shell_draft_write") or "").strip() or None
+        if draft_write_target:
+            completion_patch = {
+                "beginner_first_success_achieved": True,
+                "advanced_surfaces_unlocked": True,
+                "beginner_current_step": "read_result",
+            }
+            if latest_run_id:
+                completion_patch["beginner_first_success_run_id"] = latest_run_id
+            if latest_run_result_preview.get("output_ref"):
+                completion_patch["beginner_first_success_output_ref"] = str(latest_run_result_preview.get("output_ref"))
+            elif latest_run_result_preview.get("final_output") and isinstance(latest_run_result_preview.get("final_output"), Mapping):
+                output_key = str((latest_run_result_preview.get("final_output") or {}).get("output_key") or "").strip()
+                if output_key:
+                    completion_patch["beginner_first_success_output_ref"] = output_key
+            if latest_run_artifacts_preview.get("first_artifact_id"):
+                completion_patch["beginner_first_success_artifact_ref"] = str(latest_run_artifacts_preview.get("first_artifact_id"))
+            controls.append({
+                "control_id": "first-success-run-mark-result-read",
+                "label": ui_text("builder.action.mark_first_result_read", app_language=app_language, fallback_text="Mark result as read"),
+                "action_kind": "first_success_completion",
+                "action_target": draft_write_target,
+                "fallback_focus_target": "runtime.result",
+                "completion_metadata_patch": completion_patch,
+            })
         _append_control("first-success-run-open-results-page", ui_text("server.shell.open_result_history_page", app_language=app_language, fallback_text="Open result history page"), result_history_target)
 
     if run_action_target:
@@ -1355,12 +1380,23 @@ def _first_success_flow_section(
     completion_action_label = str(result.get("completion_action_label") or "").strip() or None
     completion_target = _action_target(completion_action_id)
     if completion_action_label and completion_target:
-        controls.append({
-            "control_id": f"first-success-flow-{completion_action_id}",
-            "label": completion_action_label,
-            "action_kind": "focus_section",
-            "action_target": completion_target,
-        })
+        completion_patch = result.get("completion_metadata_patch") if isinstance(result.get("completion_metadata_patch"), Mapping) else {}
+        if completion_action_id == "mark_first_result_read":
+            controls.append({
+                "control_id": f"first-success-flow-{completion_action_id}",
+                "label": completion_action_label,
+                "action_kind": "first_success_completion",
+                "action_target": str(routes.get("workspace_shell_draft_write") or "").strip() or completion_target,
+                "fallback_focus_target": completion_target,
+                "completion_metadata_patch": dict(completion_patch),
+            })
+        else:
+            controls.append({
+                "control_id": f"first-success-flow-{completion_action_id}",
+                "label": completion_action_label,
+                "action_kind": "focus_section",
+                "action_target": completion_target,
+            })
 
     lines = _summary_lines(
         ui_text("server.shell.first_success_flow_state_prefix", app_language=app_language, fallback_text="Flow state: {state}", state=flow_state.replace("_", " ")),
@@ -3989,6 +4025,7 @@ def render_workspace_shell_runtime_html(payload: Mapping[str, Any]) -> str:
   </main>
   <script>
     const initialPayload = {payload_json};
+    let routes = initialPayload && initialPayload.routes ? initialPayload.routes : {{}};
     const launchTemplate = {launch_template_json};
     const initialRunStatusPreview = {latest_run_status_preview_json};
     const initialRunResultPreview = {latest_run_result_preview_json};
@@ -4086,10 +4123,10 @@ def render_workspace_shell_runtime_html(payload: Mapping[str, Any]) -> str:
     let currentNavigation = initialNavigation || null;
     let focusedSectionId = (currentNavigation && currentNavigation.default_section) || 'status';
     let focusedLevel = (currentNavigation && currentNavigation.default_level) || 'summary';
-    let activeRunStatusPath = initialPayload.routes.latest_run_status || null;
-    let activeRunResultPath = initialPayload.routes.latest_run_result || null;
-    let activeRunTracePath = initialPayload.routes.latest_run_trace || null;
-    let activeRunArtifactsPath = initialPayload.routes.latest_run_artifacts || null;
+    let activeRunStatusPath = routes.latest_run_status || null;
+    let activeRunResultPath = routes.latest_run_result || null;
+    let activeRunTracePath = routes.latest_run_trace || null;
+    let activeRunArtifactsPath = routes.latest_run_artifacts || null;
     let latestStatusBodyState = null;
     let latestResultBodyState = null;
     let latestTraceBodyState = null;
@@ -4408,6 +4445,61 @@ def render_workspace_shell_runtime_html(payload: Mapping[str, Any]) -> str:
     function writeValidationSection(section) {{
       currentValidationSection = writeShellSection(section, currentValidationSection, validationSummaryEl, validationDetailEl, validationControlsEl, 'Validation guidance will appear here.', 'Validation detail will appear here.');
     }}
+    function applyWorkspaceShellRuntimePayload(body) {{
+      if (!body || typeof body !== 'object') return;
+      if (body.routes && typeof body.routes === 'object') {{
+        routes = body.routes;
+        activeRunStatusPath = routes.latest_run_status || activeRunStatusPath;
+        activeRunResultPath = routes.latest_run_result || activeRunResultPath;
+        activeRunTracePath = routes.latest_run_trace || activeRunTracePath;
+        activeRunArtifactsPath = routes.latest_run_artifacts || activeRunArtifactsPath;
+      }}
+      if (body.navigation) {{
+        currentNavigation = body.navigation;
+        renderRuntimeNav();
+      }}
+      if (body.first_success_setup_section) writeFirstSuccessSetupSection(body.first_success_setup_section);
+      if (body.first_success_run_section) writeFirstSuccessRunSection(body.first_success_run_section);
+      if (body.first_success_flow_section) writeFirstSuccessFlowSection(body.first_success_flow_section);
+      if (body.return_use_continuity_section) writeReturnUseContinuitySection(body.return_use_continuity_section);
+      if (body.product_surface_review_section) writeProductSurfaceReviewSection(body.product_surface_review_section);
+      if (body.feedback_continuity_section) writeFeedbackContinuitySection(body.feedback_continuity_section);
+      if (body.designer_section) writeDesignerSection(body.designer_section);
+      if (body.validation_section) writeValidationSection(body.validation_section);
+      if (body.step_state_banner) writeStepStateBanner(body.step_state_banner);
+      writeShellContinuity(captureShellContinuity());
+    }}
+    async function persistFirstSuccessCompletion(control) {{
+      const target = String((control && control.action_target) || routes.workspace_shell_draft_write || '').trim();
+      const fallbackTarget = String((control && control.fallback_focus_target) || 'runtime.result');
+      if (!target || !target.startsWith('/')) {{
+        await performShellAction({{ action_kind: 'focus_section', action_target: fallbackTarget }});
+        return;
+      }}
+      const resultReading = currentFirstSuccessFlowSection && currentFirstSuccessFlowSection.result_reading && typeof currentFirstSuccessFlowSection.result_reading === 'object' ? currentFirstSuccessFlowSection.result_reading : {{}};
+      const completionPatch = control && control.completion_metadata_patch && typeof control.completion_metadata_patch === 'object'
+        ? control.completion_metadata_patch
+        : (resultReading.completion_metadata_patch || {{}});
+      const response = await fetch(target, {{
+        method: 'PUT',
+        credentials: 'same-origin',
+        headers: {{ 'content-type': 'application/json' }},
+        body: JSON.stringify({{
+          first_success_action: 'mark_first_result_read',
+          completion_action_id: 'mark_first_result_read',
+          completion_metadata_patch: completionPatch,
+        }}),
+      }});
+      const body = await response.json();
+      if (!response.ok) {{
+        writeLog(body);
+        return;
+      }}
+      applyWorkspaceShellRuntimePayload(body);
+      await persistCurrentStep('read_result', {{ first_success_achieved: true, advanced_surfaces_unlocked: true }});
+      setFocusedSection('result', 'summary');
+      writeLog('Marked first result as read.');
+    }}
     async function applyTemplateControl(control) {{
       const displayName = String(control && (control.template_display_name || control.label) || localizedUi.starterTemplateFallback);
       const templateSummary = String(control && control.template_summary || localizedUi.templateSelectedSummary);
@@ -4457,6 +4549,10 @@ def render_workspace_shell_runtime_html(payload: Mapping[str, Any]) -> str:
       }}
       if (kind === 'apply_template') {{
         applyTemplateControl(control);
+        return;
+      }}
+      if (kind === 'first_success_completion') {{
+        await persistFirstSuccessCompletion(control);
         return;
       }}
       if (kind === 'open_run_status') {{

@@ -180,6 +180,17 @@ def _append_bounded_history(current: Any, entry: Mapping[str, Any], *, limit: in
     return existing[-limit:]
 
 
+def _optional_text(value: Any) -> str | None:
+    if value is None:
+        return None
+    normalized = str(value).strip()
+    return normalized or None
+
+
+def _first_success_completion_value(body: Mapping[str, Any], patch: Mapping[str, Any], *, body_key: str, patch_key: str) -> str | None:
+    return _optional_text(body.get(body_key)) or _optional_text(patch.get(patch_key))
+
+
 def _apply_workspace_shell_draft_patch(current_source: dict[str, Any], body: Mapping[str, Any], now_iso: str | None = None) -> dict[str, Any]:
     data = json.loads(json.dumps(_to_jsonable(current_source)))
     designer = dict(data.get("designer") or {})
@@ -211,6 +222,14 @@ def _apply_workspace_shell_draft_patch(current_source: dict[str, Any], body: Map
     validation_message = str(body.get("validation_message") or "").strip() or None
     clear_designer_state = bool(body.get("clear_designer_state"))
     clear_validation_state = bool(body.get("clear_validation_state"))
+    first_success_action = str(body.get("first_success_action") or body.get("completion_action_id") or body.get("action_id") or "").strip() or None
+    raw_completion_patch = body.get("completion_metadata_patch") if isinstance(body.get("completion_metadata_patch"), Mapping) else {}
+    completion_metadata_patch = dict(raw_completion_patch or {})
+    mark_first_result_read = bool(
+        first_success_action == "mark_first_result_read"
+        or body.get("mark_first_result_read") is True
+        or completion_metadata_patch
+    )
 
     if template_id or template_display_name or request_text or designer_action or clear_designer_state:
         if clear_designer_state:
@@ -316,6 +335,68 @@ def _apply_workspace_shell_draft_patch(current_source: dict[str, Any], body: Map
                     "occurred_at": now_iso,
                 },
             )
+        metadata["runtime_shell_server_state"] = shell_state
+        ui["metadata"] = metadata
+        data["ui"] = ui
+
+    if mark_first_result_read:
+        from src.ui.beginner_milestones import build_beginner_first_success_completion_metadata_patch
+
+        run_id = _first_success_completion_value(
+            body,
+            completion_metadata_patch,
+            body_key="run_id",
+            patch_key="beginner_first_success_run_id",
+        )
+        output_ref = _first_success_completion_value(
+            body,
+            completion_metadata_patch,
+            body_key="output_ref",
+            patch_key="beginner_first_success_output_ref",
+        )
+        artifact_ref = _first_success_completion_value(
+            body,
+            completion_metadata_patch,
+            body_key="artifact_ref",
+            patch_key="beginner_first_success_artifact_ref",
+        )
+        completed_at = _first_success_completion_value(
+            body,
+            completion_metadata_patch,
+            body_key="completed_at",
+            patch_key="beginner_first_success_completed_at",
+        ) or now_iso
+        metadata.update(
+            build_beginner_first_success_completion_metadata_patch(
+                run_id=run_id,
+                output_ref=output_ref,
+                artifact_ref=artifact_ref,
+                completed_at=completed_at,
+            )
+        )
+        shell_state["first_success_action"] = "mark_first_result_read"
+        if run_id:
+            shell_state["first_success_run_id"] = run_id
+        if output_ref:
+            shell_state["first_success_output_ref"] = output_ref
+        if artifact_ref:
+            shell_state["first_success_artifact_ref"] = artifact_ref
+        if completed_at:
+            shell_state["first_success_completed_at"] = completed_at
+        if now_iso:
+            shell_state["updated_at"] = now_iso
+        shell_state["first_success_action_history"] = _append_bounded_history(
+            shell_state.get("first_success_action_history"),
+            {
+                "entry_type": "first_success_action",
+                "first_success_action": "mark_first_result_read",
+                "run_id": run_id,
+                "output_ref": output_ref,
+                "artifact_ref": artifact_ref,
+                "completed_at": completed_at,
+                "occurred_at": now_iso,
+            },
+        )
         metadata["runtime_shell_server_state"] = shell_state
         ui["metadata"] = metadata
         data["ui"] = ui

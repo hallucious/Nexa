@@ -1836,6 +1836,30 @@ def test_fastapi_binding_workspace_shell_draft_write_persists_server_backed_stat
     assert 'Persisted validation status: blocked' in '\n'.join(payload['validation_section']['detail']['items'])
 
 
+
+def test_fastapi_binding_workspace_shell_draft_write_marks_first_result_read() -> None:
+    client = _make_client()
+    response = client.put(
+        '/api/workspaces/ws-001/shell/draft',
+        headers=_session_headers(),
+        json={
+            'first_success_action': 'mark_first_result_read',
+            'completion_metadata_patch': {
+                'beginner_first_success_run_id': 'run-002',
+                'beginner_first_success_output_ref': 'answer',
+                'beginner_first_success_artifact_ref': 'artifact-2',
+            },
+        },
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload['first_success_flow_section']['flow_state'] == 'complete'
+    assert payload['first_success_flow_section']['current_step_id'] is None
+    assert payload['first_success_flow_section']['advanced_surfaces_unlocked'] is True
+    assert payload['first_success_flow_section']['result_reading']['read_complete'] is True
+    assert payload['return_use_continuity_section']['return_use_state'] != 'inactive'
+
 def test_fastapi_binding_workspace_result_history_routes_round_trip() -> None:
     client = _make_client()
     api_response = client.get('/api/workspaces/ws-001/result-history', headers=_session_headers())
