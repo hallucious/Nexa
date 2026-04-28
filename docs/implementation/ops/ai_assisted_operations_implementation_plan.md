@@ -72,6 +72,159 @@ The following must be true before implementation begins:
 
 If any of these are false, implementation must stop and the missing precondition must be closed first.
 
+
+## 5A. Mandatory internal-access boundary
+
+The implementation must treat AI-assisted operations as an internal owner/operator/admin-only system.
+It is not a general-user feature and must never be exposed as part of ordinary workspace, circuit, run, or account flows.
+
+### 5A.1 Access rule
+
+Allowed access is limited to:
+
+- `owner` actors,
+- `admin` actors,
+- explicitly authorized `operator` actors,
+- explicitly scoped `support_limited` actors where support-safe access has been granted.
+
+Denied access includes:
+
+- ordinary `general_user` sessions,
+- workspace owners who do not also have an operations role,
+- project collaborators who do not also have an operations role,
+- customer-facing API tokens,
+- frontend-only claims of authority,
+- any request lacking explicit `ops.*` permission.
+
+### 5A.2 Enforcement rule
+
+Operations AI access must be denied at backend route guard level before:
+
+1. operational source lookup,
+2. evidence bundle construction,
+3. model invocation,
+4. recommendation generation,
+5. approval staging,
+6. action execution.
+
+Frontend hiding is still required, but it is not a security boundary.
+
+### 5A.3 Recommended code layout for access enforcement
+
+Recommended files:
+
+- `src/ops_ai/access_policy.py`
+- `src/ops_ai/actor_context.py`
+- `src/ops_ai/permission_matrix.py`
+- `src/ops_ai/route_guards.py`
+- `src/ops_ai/source_registry.py`
+- `src/ops_ai/audit_writer.py`
+- `src/server/routes/admin_ops_ai.py`
+- `tests/ops_ai/test_access_policy.py`
+- `tests/ops_ai/test_ops_ai_route_guards.py`
+- `tests/ops_ai/test_general_user_ops_ai_denial.py`
+
+If the existing server layout uses a different route/module pattern, the same responsibilities must be implemented in equivalent files.
+
+### 5A.4 Required route guard shape
+
+Every operations route must call a guard equivalent to:
+
+- `require_ops_permission(actor, permission, capability_level)`
+- `require_ops_target_scope(actor, target_ref, action_type)`
+- `require_ops_approval_authority(actor, required_approval_level)`
+
+Recommended request flow:
+
+1. Resolve authenticated actor from the normal auth adapter.
+2. Convert authenticated identity into `OpsActorContext`.
+3. Resolve `OpsPermissionSet` from server-side policy.
+4. Reject if actor class is `general_user`.
+5. Reject if required `ops.*` permission is absent.
+6. Reject if target scope is outside the actor's operations authority.
+7. Continue to source registry only after guard success.
+
+### 5A.5 Required permission values
+
+Minimum explicit permissions:
+
+- `ops.read_summary`
+- `ops.read_evidence_redacted`
+- `ops.recommend_action`
+- `ops.stage_action`
+- `ops.approve_support_action`
+- `ops.approve_admin_action`
+- `ops.approve_owner_action`
+- `ops.execute_approved_action`
+- `ops.manage_ops_policy`
+
+The `general_user` role must receive none of these permissions.
+
+### 5A.6 Route namespace
+
+Recommended internal/admin API namespace:
+
+- `GET /api/admin/ops-ai/summary`
+- `GET /api/admin/ops-ai/issues`
+- `GET /api/admin/ops-ai/issues/{issue_id}`
+- `POST /api/admin/ops-ai/recommendations`
+- `POST /api/admin/ops-ai/actions/{action_id}/stage`
+- `POST /api/admin/ops-ai/actions/{action_id}/approve`
+- `POST /api/admin/ops-ai/actions/{action_id}/execute`
+
+The following namespaces must not expose operations AI functions:
+
+- `/api/workspaces/*`
+- `/api/circuits/*`
+- `/api/runs/*` unless nested under admin/internal guard
+- `/api/user/*`
+- `/api/public/*`
+- public share routes
+
+### 5A.7 UI integration rule
+
+The product UI must not show operations AI entry points to general users.
+
+Required UI behavior:
+
+1. no general-user navigation item for operations AI,
+2. no route prefetch for unauthorized actors,
+3. direct URL attempt receives an unauthorized state,
+4. approval buttons render only after backend confirms approval authority,
+5. evidence bundles render only for authorized operations actors,
+6. no operations AI data is cached in general-user client state.
+
+### 5A.8 Audit rule for denied access
+
+Unauthorized attempts must be audited without exposing sensitive payloads.
+
+Minimum denial audit fields:
+
+- timestamp,
+- actor identity if known,
+- actor class,
+- route or action requested,
+- target ref if safe to store,
+- denial reason code,
+- correlation id,
+- source lookup attempted: false,
+- model invocation attempted: false.
+
+### 5A.9 Required denial tests
+
+The implementation is not acceptable unless tests prove:
+
+1. a `general_user` cannot call Stage A read-only routes,
+2. a `general_user` cannot read evidence bundles,
+3. a `general_user` cannot trigger recommendation generation,
+4. a `general_user` cannot stage, approve, or execute actions,
+5. a workspace owner without operations role is denied,
+6. a support-limited actor cannot access admin/owner-only routes,
+7. denial occurs before source registry access,
+8. denial occurs before model invocation,
+9. forbidden actions are still denied for operations actors unless explicitly handled by approved policy,
+10. denied access is audited with redacted metadata only.
+
 ## 6. Required source surfaces
 
 The implementation must consume structured operational sources before introducing new derived layers.
@@ -155,6 +308,11 @@ Recommended internal routes:
 - `GET /api/admin/ops/runbooks/recommendations`
 
 These routes are internal/admin-only.
+
+
+All Stage A routes must be protected by the internal operations route guard.
+A route being read-only does not make it user-facing.
+General users, workspace owners without operations role, and customer-facing tokens must receive denial before any operational source is queried.
 
 ### 8.6 Safety requirements
 
@@ -371,6 +529,10 @@ Suggested test families:
 - `tests/ops_ai/test_action_execution_boundaries.py`
 - `tests/ops_ai/test_automation_guard.py`
 - `tests/ops_ai/test_audit_integrity.py`
+- `tests/ops_ai/test_general_user_ops_ai_denial.py`
+- `tests/ops_ai/test_workspace_owner_without_ops_role_denied.py`
+- `tests/ops_ai/test_ops_ai_denial_before_model_invocation.py`
+- `tests/ops_ai/test_ops_ai_denial_audit_redaction.py`
 
 ## 13. Permission model
 

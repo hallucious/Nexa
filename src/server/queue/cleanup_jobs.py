@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass, field
+from datetime import datetime, timedelta, timezone
 from typing import Any, Optional
 
 logger = logging.getLogger(__name__)
@@ -33,6 +34,16 @@ class OrphanReconciliationResult:
     marked_lost_redis: int = 0
     errors: int = 0
 
+
+
+
+@dataclass(frozen=True)
+class FileExtractionCleanupResult:
+    """Summary of stale file-extraction cleanup."""
+
+    stale_found: int = 0
+    rejected: int = 0
+    errors: int = 0
 
 @dataclass(frozen=True)
 class CleanupResult:
@@ -127,6 +138,60 @@ def cleanup_expired_terminal_submissions(
         return CleanupResult(expired_found=len(expired_rows), errors=1)
 
 
+
+def _cleanup_now_iso() -> str:
+    return datetime.now(timezone.utc).isoformat()
+
+
+def _cleanup_cutoff_iso(*, now_iso: str | None, stale_after_s: int) -> str:
+    try:
+        now = datetime.fromisoformat((now_iso or _cleanup_now_iso()).replace("Z", "+00:00"))
+    except ValueError:
+        now = datetime.now(timezone.utc)
+    return (now - timedelta(seconds=stale_after_s)).isoformat()
+
+
+def reject_stale_file_extractions(
+    *,
+    extraction_store: Any,
+    stale_after_s: int = 1800,
+    now_iso: str | None = None,
+) -> FileExtractionCleanupResult:
+    """Reject queued/extracting file extractions older than the stale threshold."""
+    from src.server.documents.file_extraction_api import FileExtractionService
+    from src.server.documents.file_extraction_models import FileExtractionFailureRequest
+
+    cutoff = _cleanup_cutoff_iso(now_iso=now_iso, stale_after_s=stale_after_s)
+    try:
+        stale_rows = extraction_store.list_stale_active_extractions(older_than_iso=cutoff)
+    except Exception as exc:  # noqa: BLE001
+        logger.error("reject_stale_file_extractions: list_stale_active_extractions failed: %s", exc)
+        return FileExtractionCleanupResult(errors=1)
+
+    rejected = 0
+    errors = 0
+    for row in stale_rows:
+        try:
+            FileExtractionService.reject_extraction(
+                FileExtractionFailureRequest(
+                    workspace_id=row.workspace_id,
+                    extraction_id=row.extraction_id,
+                    reason_code="file_extraction.stale_worker_timeout",
+                    message="File extraction did not reach a terminal state before the stale threshold.",
+                    extractor_ref=row.extractor_ref,
+                    failure_metadata={"stale_after_s": stale_after_s, "cutoff": cutoff},
+                ),
+                extraction_store=extraction_store,
+                now_iso=now_iso,
+            )
+            rejected += 1
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("reject_stale_file_extractions: reject failed for extraction_id=%s: %s", getattr(row, "extraction_id", ""), exc)
+            errors += 1
+
+    return FileExtractionCleanupResult(stale_found=len(stale_rows), rejected=rejected, errors=errors)
+
+
 # ------------------------------------------------------------------ #
 # arq cron job wrappers
 # ------------------------------------------------------------------ #
@@ -157,5 +222,20 @@ async def cron_cleanup_expired(ctx: dict[str, Any]) -> dict[str, Any]:
     return {
         "expired_found": result.expired_found,
         "deleted": result.deleted,
+        "errors": result.errors,
+    }
+
+
+async def cron_reject_stale_file_extractions(ctx: dict[str, Any]) -> dict[str, Any]:
+    """arq cron job wrapper for stale file extraction rejection."""
+    extraction_store: Optional[Any] = ctx.get("file_extraction_store") or ctx.get("extraction_store")
+    if extraction_store is None:
+        logger.warning("cron_reject_stale_file_extractions: file_extraction_store not in ctx; skipping")
+        return {"skipped": True, "reason": "no_file_extraction_store"}
+
+    result = reject_stale_file_extractions(extraction_store=extraction_store)
+    return {
+        "stale_found": result.stale_found,
+        "rejected": result.rejected,
         "errors": result.errors,
     }

@@ -116,6 +116,68 @@ The operations AI must not read from the following unless separately approved un
 
 The system must consume structured and redacted operational surfaces instead of unrestricted raw data pulls.
 
+
+## 7A. Operations route and source-access gate
+
+The AI-assisted operations data layer must be reachable only through approved internal/admin access surfaces.
+
+General product users must not be able to trigger source reads indirectly by calling an operations AI route.
+This includes read-only summaries.
+Read-only does not mean public.
+
+Required enforcement order for every operations AI request:
+
+1. authenticate actor,
+2. resolve actor class and operations permissions,
+3. verify requested capability level,
+4. verify target scope,
+5. only then query source registry,
+6. only then construct evidence bundle,
+7. only then invoke AI model if needed.
+
+If authorization fails, the source registry must not be queried.
+If source scope fails, the evidence bundle must not be constructed.
+If evidence authorization fails, the AI model must not be invoked.
+
+## 7B. Source registry allowlist
+
+The operations AI must read operational data through an allowlisted `OpsSourceRegistry` or equivalent service.
+
+Each source entry must declare:
+
+- `source_id`
+- `source_class`
+- `source_tier`
+- `minimum_permission`
+- `allowed_actor_classes`
+- `redaction_profile`
+- `freshness_policy`
+- `target_scope_policy`
+- `raw_payload_allowed` flag, defaulting to `false`
+
+A source without an explicit registry entry is inaccessible to the operations AI.
+
+## 7C. Backend denial over UI hiding
+
+UI hiding is required but insufficient.
+The backend must deny unauthorized operations AI access even when:
+
+1. a user manually enters an internal URL,
+2. a stale frontend bundle exposes a hidden route,
+3. a browser replays a previous request,
+4. a malicious client sends a forged capability claim,
+5. a user owns the workspace or run referenced by the requested target.
+
+Workspace ownership is not operations authority.
+Product subscription ownership is not operations authority.
+
+## 7D. Evidence bundle audience binding
+
+Evidence bundles must be audience-bound.
+
+An evidence bundle prepared for an owner/admin/operator must not be reused as a general-user response.
+A general-user-safe product explanation must be generated through normal product surfaces, not through the operations AI evidence bundle path.
+
 ## 8. Consistency rule
 
 If two source tiers disagree:

@@ -156,6 +156,64 @@ Minimum actor classes:
 
 The same physical system may host more than one actor class, but the audit model must keep them distinct.
 
+
+## 7A. Product-user exclusion rule
+
+General product users are not operations actors.
+
+A general product user may own workspaces, create circuits, run workflows, upload files, view their own results, and manage ordinary product settings.
+None of those product capabilities grants access to the AI-assisted operations system.
+
+The following must be denied to general product users:
+
+1. operations AI route access,
+2. operations AI UI access,
+3. operations AI summary access,
+4. operations evidence bundle access,
+5. operations recommendation access,
+6. operations approval access,
+7. operations action execution,
+8. operations AI audit-log access.
+
+The denial must happen at backend policy level.
+The UI may hide these surfaces, but UI hiding is not the source of authority.
+
+## 7B. Required actor-to-permission matrix
+
+A conforming implementation must encode a matrix equivalent to the following.
+
+| Actor class | Allowed AI-assisted operations capability | Notes |
+|---|---|---|
+| `general_user` | none | Product access only. No ops AI permission. |
+| `support_limited` | delegated read-only or support-safe recommendation only | Must be explicitly granted and scope-limited. |
+| `operator` | read-only and recommend-only by default | May stage actions only if explicitly granted. |
+| `admin` | read, recommend, stage, approve admin-level actions | Still cannot bypass owner-level approvals. |
+| `owner` | highest approval authority | Still subject to audit, policy, and forbidden-action rules. |
+| `ops_ai_service` | no independent human authority | May act only under policy and recorded human/automation context. |
+| `automation_runtime` | narrow whitelisted housekeeping only | No broad operational authority. |
+
+The same authenticated account may have multiple roles, but every request must resolve to an explicit actor class and permission set before any operations AI work begins.
+
+## 7C. Capability-to-route binding
+
+Routes must declare required permissions explicitly.
+
+Minimum route binding:
+
+| Route class | Required permission |
+|---|---|
+| read summaries | `ops.read_summary` |
+| read evidence bundles | `ops.read_evidence_redacted` |
+| generate recommendations | `ops.recommend_action` |
+| stage an action | `ops.stage_action` |
+| approve support action | `ops.approve_support_action` |
+| approve admin action | `ops.approve_admin_action` |
+| approve owner-sensitive action | `ops.approve_owner_action` |
+| execute approved action | `ops.execute_approved_action` |
+| change operations policy | `ops.manage_ops_policy` |
+
+No route may infer its authorization from UI state, frontend claims, workspace ownership, or generic authentication alone.
+
 ## 8. Approval mapping
 
 Approval levels must be risk-based.

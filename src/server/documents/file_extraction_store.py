@@ -75,6 +75,28 @@ class InMemoryFileExtractionStore:
             if record.workspace_id == normalized_workspace and record.upload_id == normalized_upload
         )
 
+    def list_queued_extractions(self, *, workspace_id: str | None = None, limit: int | None = None) -> tuple[FileExtractionRecord, ...]:
+        normalized_workspace = str(workspace_id or "").strip() or None
+        rows = [
+            record for record in self._extractions.values()
+            if record.extraction_state == "queued" and (normalized_workspace is None or record.workspace_id == normalized_workspace)
+        ]
+        rows.sort(key=lambda item: (item.created_at or "", item.extraction_id))
+        if limit is not None:
+            rows = rows[:max(int(limit), 0)]
+        return tuple(rows)
+
+    def list_stale_active_extractions(self, *, older_than_iso: str) -> tuple[FileExtractionRecord, ...]:
+        cutoff = str(older_than_iso or "").strip()
+        if not cutoff:
+            return ()
+        rows = [
+            record for record in self._extractions.values()
+            if record.extraction_state in {"queued", "extracting"} and str(record.updated_at or record.created_at or "") < cutoff
+        ]
+        rows.sort(key=lambda item: (item.updated_at or item.created_at or "", item.extraction_id))
+        return tuple(rows)
+
     def update_extraction_state(
         self,
         *,

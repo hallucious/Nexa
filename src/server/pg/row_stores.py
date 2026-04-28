@@ -1749,6 +1749,59 @@ class PostgresFileExtractionStore:
             normalized_rows.append(_record_from_row(row))
         return tuple(normalized_rows)
 
+    def list_queued_extractions(self, *, workspace_id: str | None = None, limit: int | None = None):
+        from src.server.documents.file_extraction_store import _record_from_row
+        params: dict[str, Any] = {}
+        where = "WHERE extraction_state = 'queued'"
+        if workspace_id is not None and str(workspace_id or "").strip():
+            where += " AND workspace_id = :workspace_id"
+            params["workspace_id"] = str(workspace_id or "").strip()
+        sql = f"""
+            SELECT extraction_id, workspace_id, upload_id, extraction_state,
+                   source_document_type, source_object_ref, text_artifact_ref,
+                   extracted_text_char_count, text_preview, content_hash,
+                   rejection_reason_code, extractor_ref, created_at, updated_at,
+                   requested_by_user_ref, metadata
+            FROM file_extractions
+            {where}
+            ORDER BY created_at ASC, extraction_id ASC
+        """
+        if limit is not None:
+            sql += " LIMIT :limit"
+            params["limit"] = max(int(limit), 0)
+        rows = _fetch_all(self.engine, sql, params)
+        normalized_rows = []
+        for row in rows:
+            row["metadata"] = _decode_json(row.get("metadata"), default={})
+            normalized_rows.append(_record_from_row(row))
+        return tuple(normalized_rows)
+
+    def list_stale_active_extractions(self, *, older_than_iso: str):
+        from src.server.documents.file_extraction_store import _record_from_row
+        cutoff = str(older_than_iso or "").strip()
+        if not cutoff:
+            return ()
+        rows = _fetch_all(
+            self.engine,
+            """
+            SELECT extraction_id, workspace_id, upload_id, extraction_state,
+                   source_document_type, source_object_ref, text_artifact_ref,
+                   extracted_text_char_count, text_preview, content_hash,
+                   rejection_reason_code, extractor_ref, created_at, updated_at,
+                   requested_by_user_ref, metadata
+            FROM file_extractions
+            WHERE extraction_state IN ('queued', 'extracting')
+              AND COALESCE(updated_at, created_at, '') < :older_than_iso
+            ORDER BY COALESCE(updated_at, created_at, '') ASC, extraction_id ASC
+            """,
+            {"older_than_iso": cutoff},
+        )
+        normalized_rows = []
+        for row in rows:
+            row["metadata"] = _decode_json(row.get("metadata"), default={})
+            normalized_rows.append(_record_from_row(row))
+        return tuple(normalized_rows)
+
     def update_extraction_state(
         self,
         *,

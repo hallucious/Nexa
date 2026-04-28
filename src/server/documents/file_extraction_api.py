@@ -8,6 +8,7 @@ from uuid import uuid4
 from src.server.documents.file_extraction_models import (
     FileExtractionCompleteRequest,
     FileExtractionEventRecord,
+    FileExtractionFailureRequest,
     FileExtractionRecord,
     FileExtractionRejectedResponse,
     FileExtractionRequest,
@@ -243,6 +244,76 @@ class FileExtractionService:
             metadata={"text_artifact_ref": artifact_ref, "extracted_text_char_count": request.extracted_text_char_count},
         ))
         return FileExtractionStatusResponse(status="extracted", extraction=updated, events=extraction_store.list_events(record.extraction_id))
+
+    @classmethod
+    def fail_extraction(
+        cls,
+        request: FileExtractionFailureRequest,
+        *,
+        extraction_store: InMemoryFileExtractionStore,
+        now_iso: str | None = None,
+    ) -> FileExtractionStatusResponse | FileExtractionRejectedResponse:
+        record = extraction_store.get_workspace_extraction(request.workspace_id, request.extraction_id)
+        if record is None:
+            return FileExtractionRejectedResponse(status="rejected", reason_code="file_extraction.not_found", message="Extraction was not found for this workspace.", workspace_id=request.workspace_id, extraction_id=request.extraction_id)
+        if record.extraction_state in {"extracted", "failed", "rejected"}:
+            return FileExtractionRejectedResponse(status="rejected", reason_code="file_extraction.terminal_state", message="Extraction is already terminal.", workspace_id=request.workspace_id, upload_id=record.upload_id, extraction_id=request.extraction_id)
+        now_value = now_iso or _iso_now()
+        updated = extraction_store.update_extraction_state(
+            extraction_id=record.extraction_id,
+            extraction_state="failed",
+            updated_at=now_value,
+            rejection_reason_code=request.reason_code,
+            extractor_ref=request.extractor_ref,
+        ) or record
+        extraction_store.append_event(cls._event(
+            extraction_id=record.extraction_id,
+            workspace_id=record.workspace_id,
+            upload_id=record.upload_id,
+            event_type="extraction.failed",
+            from_state=record.extraction_state,
+            to_state="failed",
+            reason_code=request.reason_code,
+            now_iso=now_value,
+            actor_user_ref=record.requested_by_user_ref,
+            metadata={"message": request.message, **dict(request.failure_metadata or {})},
+        ))
+        return FileExtractionStatusResponse(status="failed", extraction=updated, events=extraction_store.list_events(record.extraction_id))
+
+    @classmethod
+    def reject_extraction(
+        cls,
+        request: FileExtractionFailureRequest,
+        *,
+        extraction_store: InMemoryFileExtractionStore,
+        now_iso: str | None = None,
+    ) -> FileExtractionStatusResponse | FileExtractionRejectedResponse:
+        record = extraction_store.get_workspace_extraction(request.workspace_id, request.extraction_id)
+        if record is None:
+            return FileExtractionRejectedResponse(status="rejected", reason_code="file_extraction.not_found", message="Extraction was not found for this workspace.", workspace_id=request.workspace_id, extraction_id=request.extraction_id)
+        if record.extraction_state in {"extracted", "failed", "rejected"}:
+            return FileExtractionRejectedResponse(status="rejected", reason_code="file_extraction.terminal_state", message="Extraction is already terminal.", workspace_id=request.workspace_id, upload_id=record.upload_id, extraction_id=request.extraction_id)
+        now_value = now_iso or _iso_now()
+        updated = extraction_store.update_extraction_state(
+            extraction_id=record.extraction_id,
+            extraction_state="rejected",
+            updated_at=now_value,
+            rejection_reason_code=request.reason_code,
+            extractor_ref=request.extractor_ref,
+        ) or record
+        extraction_store.append_event(cls._event(
+            extraction_id=record.extraction_id,
+            workspace_id=record.workspace_id,
+            upload_id=record.upload_id,
+            event_type="extraction.rejected",
+            from_state=record.extraction_state,
+            to_state="rejected",
+            reason_code=request.reason_code,
+            now_iso=now_value,
+            actor_user_ref=record.requested_by_user_ref,
+            metadata={"message": request.message, **dict(request.failure_metadata or {})},
+        ))
+        return FileExtractionStatusResponse(status="rejected", extraction=updated, events=extraction_store.list_events(record.extraction_id))
 
     @staticmethod
     def status(*, workspace_id: str, extraction_id: str, extraction_store: InMemoryFileExtractionStore, include_events: bool = True) -> FileExtractionStatusResponse | FileExtractionRejectedResponse:

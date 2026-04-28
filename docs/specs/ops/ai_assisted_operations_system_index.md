@@ -38,6 +38,17 @@ It defines the operational-assistance specification family only.
 
 The AI-assisted operations layer is downstream of the product runtime and operational surfaces.
 
+
+### 3.5 Internal access boundary
+
+The entire AI-assisted operations specification family is governed by one cross-cutting rule:
+
+AI-assisted operations is internal owner/operator/admin infrastructure.
+It is not a general-user product feature.
+
+General users must not access operations AI routes, summaries, evidence bundles, recommendations, approvals, action execution, or audit records.
+This must be enforced by backend authorization and policy checks, not merely by hidden UI navigation.
+
 It depends on:
 
 1. the product's run state,

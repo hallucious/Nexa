@@ -763,6 +763,13 @@ Read-only ops insight.
 **Must deliver**
 - AI-assisted ops insight without write authority
 
+
+**Access boundary required**
+- owner/operator/admin-only backend route guard
+- no general-user or workspace-owner access by default
+- denial before source lookup, evidence construction, or model invocation
+- unauthorized attempt audit with redacted metadata
+
 ### Batch 5D — AI-assisted operations Stage B
 **Primary goal**
 Recommendation and decision-structuring.
@@ -775,6 +782,12 @@ Recommendation and decision-structuring.
 
 **Must deliver**
 - concrete recommendations, no autonomous actions
+
+
+**Access boundary required**
+- recommendations visible only to authorized operations actors
+- no recommendation API exposed through general-user product routes
+- support-limited actors see only delegated support-safe recommendations
 
 ### Batch 5E — AI-assisted operations Stage C
 **Primary goal**
@@ -789,6 +802,12 @@ Approval-gated safe actions.
 **Must deliver**
 - no ungated autonomous mutation
 - explicit approval boundary on each action
+
+
+**Access boundary required**
+- approval controls render only after backend confirms approval authority
+- general users cannot stage, approve, or execute operations AI actions
+- execution endpoint must re-check permission and approval state immediately before execution
 
 ### Batch 5F — AI-assisted operations Stage D (optional within Phase 5)
 **Primary goal**

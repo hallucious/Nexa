@@ -207,6 +207,20 @@ If an Ops document refers to `ops_multi_agent_coordination_spec.md` or to "multi
 It does **not** authorize any change to Nexa's constitutional execution model.
 Node remains the sole execution unit, and ops-agent coordination must not be misread as engine-level multi-agent orchestration.
 
+
+### 4.10 AI-assisted operations is internal-only
+AI-assisted operations is an owner/operator/admin-only operational system.
+It must not be exposed to general users through product UI, workspace APIs, public-share routes, user-facing run APIs, or customer-facing tokens.
+
+Implementation rule:
+- every AI-assisted operations route must be under an internal/admin route namespace or equivalent guarded surface,
+- every route must enforce backend `ops.*` permissions before source lookup or model invocation,
+- UI hiding is required but never sufficient,
+- general users, workspace owners, and project collaborators receive no operations AI access unless they also possess an explicit operations role,
+- unauthorized attempts must be denied before evidence bundle construction and audited with redacted metadata only.
+
+This rule overrides any ambiguous wording such as "operator-facing" or "admin surface" if a future implementer could misread it as a general product capability.
+
 ### 4.10 Expansion comes after usability and operability
 Do not move to broad capability expansion before the core product and its operational support are structurally credible.
 
@@ -759,6 +773,19 @@ Once users, files, and builder artifacts exist in live flows, the product must b
 ### Why AI-assisted operations is after admin surface
 Operational AI must consume structured operational truth and role boundaries.
 Without that, it is unsafe and difficult to audit.
+
+
+### Required internal-access boundary
+Before Stage A is considered implemented, the project must have:
+
+- explicit `ops.*` backend permissions,
+- a server-side operations actor context,
+- route guards for every AI-assisted operations endpoint,
+- denial tests for general users and workspace owners without operations role,
+- proof that denied requests do not query operational sources or invoke models,
+- redacted audit records for unauthorized attempts.
+
+AI-assisted operations must never be mounted into the general product route tree without these guards.
 
 ## 11.6 Tests required before Phase 6
 - observability event and log tests

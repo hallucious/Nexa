@@ -60,6 +60,35 @@ class FileExtractionCompleteRequest:
             raise ValueError("file_extraction.extracted_text_char_count_invalid")
 
 
+
+@dataclass(frozen=True)
+class FileExtractionFailureRequest:
+    workspace_id: str
+    extraction_id: str
+    reason_code: str
+    message: str
+    extractor_ref: Optional[str] = None
+    failure_metadata: Mapping[str, Any] = field(default_factory=dict)
+
+    def __post_init__(self) -> None:
+        workspace_id = str(self.workspace_id or "").strip()
+        extraction_id = str(self.extraction_id or "").strip()
+        reason_code = str(self.reason_code or "").strip()
+        message = str(self.message or "").strip()
+        object.__setattr__(self, "workspace_id", workspace_id)
+        object.__setattr__(self, "extraction_id", extraction_id)
+        object.__setattr__(self, "reason_code", reason_code)
+        object.__setattr__(self, "message", message)
+        if not workspace_id:
+            raise ValueError("file_extraction.workspace_id_required")
+        if not extraction_id:
+            raise ValueError("file_extraction.extraction_id_required")
+        if not reason_code:
+            raise ValueError("file_extraction.reason_code_required")
+        if not message:
+            raise ValueError("file_extraction.message_required")
+
+
 @dataclass(frozen=True)
 class FileExtractionRecord:
     extraction_id: str
