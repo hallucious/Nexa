@@ -13,6 +13,7 @@ from src.server.boundary_models import EngineResultEnvelope, EngineRunLaunchResp
 from src.server.run_admission_models import ExecutionTargetCatalogEntry, ProductAdmissionPolicy
 from src.server.aws_secrets_manager_models import AwsSecretsManagerBindingConfig
 from src.server.documents.file_ingestion_store import InMemoryFileUploadStore
+from src.server.documents.file_extraction_store import InMemoryFileExtractionStore
 
 
 @dataclass(frozen=True)
@@ -81,6 +82,7 @@ SavedPublicShareRowsProvider = Callable[[], Sequence[Mapping[str, Any]]]
 SavedPublicShareWriter = Callable[[Mapping[str, Any]], Mapping[str, Any]]
 SavedPublicShareDeleter = Callable[[str], bool]
 FileUploadStore = Any
+FileExtractionStore = Any
 
 
 def _none_workspace(_: str) -> Optional[WorkspaceAuthorizationContext]:
@@ -258,6 +260,7 @@ class FastApiRouteDependencies:
     saved_public_share_writer: SavedPublicShareWriter = _noop_saved_public_share_writer
     saved_public_share_deleter: SavedPublicShareDeleter = _noop_saved_public_share_deleter
     file_upload_store: FileUploadStore = field(default_factory=InMemoryFileUploadStore)
+    file_extraction_store: FileExtractionStore = field(default_factory=InMemoryFileExtractionStore)
     admission_policy: ProductAdmissionPolicy = field(default_factory=ProductAdmissionPolicy)
     engine_launch_decider: Optional[EngineLaunchDecider] = None
     run_id_factory: Optional[IdentifierFactory] = None

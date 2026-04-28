@@ -1604,3 +1604,236 @@ class PostgresFileUploadStore:
             row["event_metadata"] = _decode_json(row.get("event_metadata"), default={})
             normalized_rows.append(_event_from_row(row))
         return tuple(normalized_rows)
+
+
+@dataclass(frozen=True)
+class PostgresFileExtractionStore:
+    engine: Engine
+
+    def write_extraction(self, record) -> Any:
+        from src.server.documents.file_extraction_store import _record_from_row
+        from src.server.documents.file_extraction_models import FileExtractionRecord
+        normalized = record if isinstance(record, FileExtractionRecord) else _record_from_row(record)
+        row = normalized.to_row()
+        _execute(
+            self.engine,
+            f"""
+            INSERT INTO file_extractions (
+                extraction_id,
+                workspace_id,
+                upload_id,
+                extraction_state,
+                source_document_type,
+                source_object_ref,
+                text_artifact_ref,
+                extracted_text_char_count,
+                text_preview,
+                content_hash,
+                rejection_reason_code,
+                extractor_ref,
+                created_at,
+                updated_at,
+                requested_by_user_ref,
+                metadata
+            ) VALUES (
+                :extraction_id,
+                :workspace_id,
+                :upload_id,
+                :extraction_state,
+                :source_document_type,
+                :source_object_ref,
+                :text_artifact_ref,
+                :extracted_text_char_count,
+                :text_preview,
+                :content_hash,
+                :rejection_reason_code,
+                :extractor_ref,
+                :created_at,
+                :updated_at,
+                :requested_by_user_ref,
+                {_json_placeholder(self.engine, 'metadata')}
+            )
+            ON CONFLICT (extraction_id) DO UPDATE SET
+                workspace_id = EXCLUDED.workspace_id,
+                upload_id = EXCLUDED.upload_id,
+                extraction_state = EXCLUDED.extraction_state,
+                source_document_type = EXCLUDED.source_document_type,
+                source_object_ref = EXCLUDED.source_object_ref,
+                text_artifact_ref = EXCLUDED.text_artifact_ref,
+                extracted_text_char_count = EXCLUDED.extracted_text_char_count,
+                text_preview = EXCLUDED.text_preview,
+                content_hash = EXCLUDED.content_hash,
+                rejection_reason_code = EXCLUDED.rejection_reason_code,
+                extractor_ref = EXCLUDED.extractor_ref,
+                updated_at = EXCLUDED.updated_at,
+                requested_by_user_ref = EXCLUDED.requested_by_user_ref,
+                metadata = EXCLUDED.metadata
+            """,
+            {**row, "metadata": _serialize_json(row.get("metadata") or {})},
+        )
+        return normalized
+
+    def get_extraction(self, extraction_id: str):
+        from src.server.documents.file_extraction_store import _record_from_row
+        normalized = str(extraction_id or "").strip()
+        if not normalized:
+            return None
+        row = _fetch_one(
+            self.engine,
+            """
+            SELECT extraction_id, workspace_id, upload_id, extraction_state,
+                   source_document_type, source_object_ref, text_artifact_ref,
+                   extracted_text_char_count, text_preview, content_hash,
+                   rejection_reason_code, extractor_ref, created_at, updated_at,
+                   requested_by_user_ref, metadata
+            FROM file_extractions
+            WHERE extraction_id = :extraction_id
+            """,
+            {"extraction_id": normalized},
+        )
+        if row is None:
+            return None
+        row["metadata"] = _decode_json(row.get("metadata"), default={})
+        return _record_from_row(row)
+
+    def get_workspace_extraction(self, workspace_id: str, extraction_id: str):
+        record = self.get_extraction(extraction_id)
+        if record is None or record.workspace_id != str(workspace_id or "").strip():
+            return None
+        return record
+
+    def list_workspace_extractions(self, workspace_id: str):
+        from src.server.documents.file_extraction_store import _record_from_row
+        normalized = str(workspace_id or "").strip()
+        rows = _fetch_all(
+            self.engine,
+            """
+            SELECT extraction_id, workspace_id, upload_id, extraction_state,
+                   source_document_type, source_object_ref, text_artifact_ref,
+                   extracted_text_char_count, text_preview, content_hash,
+                   rejection_reason_code, extractor_ref, created_at, updated_at,
+                   requested_by_user_ref, metadata
+            FROM file_extractions
+            WHERE workspace_id = :workspace_id
+            ORDER BY updated_at DESC, extraction_id DESC
+            """,
+            {"workspace_id": normalized},
+        )
+        normalized_rows = []
+        for row in rows:
+            row["metadata"] = _decode_json(row.get("metadata"), default={})
+            normalized_rows.append(_record_from_row(row))
+        return tuple(normalized_rows)
+
+    def list_upload_extractions(self, workspace_id: str, upload_id: str):
+        from src.server.documents.file_extraction_store import _record_from_row
+        normalized_workspace = str(workspace_id or "").strip()
+        normalized_upload = str(upload_id or "").strip()
+        rows = _fetch_all(
+            self.engine,
+            """
+            SELECT extraction_id, workspace_id, upload_id, extraction_state,
+                   source_document_type, source_object_ref, text_artifact_ref,
+                   extracted_text_char_count, text_preview, content_hash,
+                   rejection_reason_code, extractor_ref, created_at, updated_at,
+                   requested_by_user_ref, metadata
+            FROM file_extractions
+            WHERE workspace_id = :workspace_id AND upload_id = :upload_id
+            ORDER BY created_at DESC, extraction_id DESC
+            """,
+            {"workspace_id": normalized_workspace, "upload_id": normalized_upload},
+        )
+        normalized_rows = []
+        for row in rows:
+            row["metadata"] = _decode_json(row.get("metadata"), default={})
+            normalized_rows.append(_record_from_row(row))
+        return tuple(normalized_rows)
+
+    def update_extraction_state(
+        self,
+        *,
+        extraction_id: str,
+        extraction_state: str,
+        updated_at: str | None = None,
+        text_artifact_ref: str | None = None,
+        extracted_text_char_count: int | None = None,
+        text_preview: str | None = None,
+        content_hash: str | None = None,
+        rejection_reason_code: str | None = None,
+        extractor_ref: str | None = None,
+    ):
+        existing = self.get_extraction(extraction_id)
+        if existing is None:
+            return None
+        from dataclasses import replace as _replace
+        updated = _replace(
+            existing,
+            extraction_state=str(extraction_state or "").strip().lower(),
+            updated_at=updated_at or existing.updated_at,
+            text_artifact_ref=text_artifact_ref if text_artifact_ref is not None else existing.text_artifact_ref,
+            extracted_text_char_count=extracted_text_char_count if extracted_text_char_count is not None else existing.extracted_text_char_count,
+            text_preview=text_preview if text_preview is not None else existing.text_preview,
+            content_hash=content_hash if content_hash is not None else existing.content_hash,
+            rejection_reason_code=rejection_reason_code,
+            extractor_ref=extractor_ref if extractor_ref is not None else existing.extractor_ref,
+        )
+        return self.write_extraction(updated)
+
+    def append_event(self, event) -> Any:
+        from src.server.documents.file_extraction_store import _event_from_row
+        from src.server.documents.file_extraction_models import FileExtractionEventRecord
+        normalized = event if isinstance(event, FileExtractionEventRecord) else _event_from_row(event)
+        row = normalized.to_row()
+        _execute(
+            self.engine,
+            f"""
+            INSERT INTO file_extraction_events (
+                event_id,
+                extraction_id,
+                workspace_id,
+                upload_id,
+                event_type,
+                from_state,
+                to_state,
+                reason_code,
+                created_at,
+                actor_user_ref,
+                event_metadata
+            ) VALUES (
+                :event_id,
+                :extraction_id,
+                :workspace_id,
+                :upload_id,
+                :event_type,
+                :from_state,
+                :to_state,
+                :reason_code,
+                :created_at,
+                :actor_user_ref,
+                {_json_placeholder(self.engine, 'event_metadata')}
+            )
+            """,
+            {**row, "event_metadata": _serialize_json(row.get("event_metadata") or {})},
+        )
+        return normalized
+
+    def list_events(self, extraction_id: str):
+        from src.server.documents.file_extraction_store import _event_from_row
+        normalized = str(extraction_id or "").strip()
+        rows = _fetch_all(
+            self.engine,
+            """
+            SELECT event_id, extraction_id, workspace_id, upload_id, event_type,
+                   from_state, to_state, reason_code, created_at, actor_user_ref,
+                   event_metadata
+            FROM file_extraction_events
+            WHERE extraction_id = :extraction_id
+            ORDER BY created_at ASC, event_id ASC
+            """,
+            {"extraction_id": normalized},
+        )
+        normalized_rows = []
+        for row in rows:
+            row["event_metadata"] = _decode_json(row.get("event_metadata"), default={})
+            normalized_rows.append(_event_from_row(row))
+        return tuple(normalized_rows)

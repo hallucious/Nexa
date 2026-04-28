@@ -16,6 +16,7 @@ from src.server.onboarding_state_store import bind_onboarding_state_store
 from src.server.pg.engine import get_postgres_sync_engine
 from src.server.pg.row_stores import (
     PostgresFeedbackStore,
+    PostgresFileExtractionStore,
     PostgresFileUploadStore,
     PostgresManagedSecretMetadataStore,
     PostgresAppendOnlyProjectionStore,
@@ -68,6 +69,8 @@ def build_postgres_dependencies(async_engine: Any, *, sync_engine: Any | None = 
     public_share_payload_store = PostgresPublicSharePayloadStore(resolved_sync_engine)
     file_upload_store = PostgresFileUploadStore(resolved_sync_engine)
     file_upload_tables_available = _table_exists(resolved_sync_engine, "file_uploads") and _table_exists(resolved_sync_engine, "file_upload_events")
+    file_extraction_store = PostgresFileExtractionStore(resolved_sync_engine)
+    file_extraction_tables_available = _table_exists(resolved_sync_engine, "file_extractions") and _table_exists(resolved_sync_engine, "file_extraction_events")
     public_share_action_report_store = PostgresPublicShareActionReportStore(resolved_sync_engine)
     saved_public_share_store = PostgresSavedPublicShareStore(resolved_sync_engine)
     dependencies = bind_workspace_registry_store(
@@ -119,6 +122,7 @@ def build_postgres_dependencies(async_engine: Any, *, sync_engine: Any | None = 
         provider_catalog_rows_provider=provider_catalog_store.list_rows,
         provider_model_catalog_rows_provider=provider_cost_catalog_store.list_rows if provider_cost_catalog_available else (lambda: ()),
         file_upload_store=file_upload_store if file_upload_tables_available else dependencies.file_upload_store,
+        file_extraction_store=file_extraction_store if file_extraction_tables_available else dependencies.file_extraction_store,
         workspace_artifact_source_provider=workspace_artifact_source_store.get,
         workspace_artifact_source_writer=workspace_artifact_source_store.write,
         run_context_provider=run_projection_store.get_run_context,

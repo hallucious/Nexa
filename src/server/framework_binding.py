@@ -1380,6 +1380,7 @@ class FrameworkRouteBindings:
         onboarding_rows: Sequence[Mapping[str, Any]] = (),
         artifact_source: Any | None = None,
         file_upload_reader=None,
+        file_extraction_reader=None,
         run_record_writer=None,
     ) -> FrameworkOutboundResponse:
         response = RunHttpRouteSurface.handle_launch_workspace_shell(
@@ -1398,6 +1399,7 @@ class FrameworkRouteBindings:
             onboarding_rows=list(onboarding_rows),
             artifact_source=artifact_source,
             file_upload_reader=file_upload_reader,
+            file_extraction_reader=file_extraction_reader,
             run_record_writer=run_record_writer,
         )
         return cls.to_framework_response(response)
@@ -2226,6 +2228,7 @@ class FrameworkRouteBindings:
         provider_model_catalog_rows: Sequence[Mapping[str, Any]] = (),
         onboarding_rows: Sequence[Mapping[str, Any]] = (),
         file_upload_reader=None,
+        file_extraction_reader=None,
         run_record_writer=None,
     ) -> FrameworkOutboundResponse:
         response = RunHttpRouteSurface.handle_launch(
@@ -2245,6 +2248,7 @@ class FrameworkRouteBindings:
             provider_model_catalog_rows=provider_model_catalog_rows,
             onboarding_rows=onboarding_rows,
             file_upload_reader=file_upload_reader,
+            file_extraction_reader=file_extraction_reader,
             run_record_writer=run_record_writer,
         )
         return cls.to_framework_response(response)

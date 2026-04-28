@@ -2667,6 +2667,7 @@ class RunHttpRouteSurface:
         onboarding_rows: list[Mapping[str, Any]] | tuple[Mapping[str, Any], ...] = (),
         artifact_source: Any | None = None,
         file_upload_reader=None,
+        file_extraction_reader=None,
         run_record_writer=None,
     ) -> HttpRouteResponse:
         guard = cls._workspace_shell_launch_guard(
@@ -2738,6 +2739,7 @@ class RunHttpRouteSurface:
             provider_probe_rows=provider_probe_rows,
             onboarding_rows=onboarding_rows,
             file_upload_reader=file_upload_reader,
+            file_extraction_reader=file_extraction_reader,
             run_record_writer=run_record_writer,
         )
         if isinstance(response.body, Mapping):
@@ -5503,6 +5505,7 @@ class RunHttpRouteSurface:
         provider_model_catalog_rows: Sequence[Mapping[str, Any]] = (),
         onboarding_rows: list[Mapping[str, Any]] | tuple[Mapping[str, Any], ...] = (),
         file_upload_reader=None,
+        file_extraction_reader=None,
         run_record_writer=None,
     ) -> HttpRouteResponse:
         if http_request.method != "POST":
@@ -5540,6 +5543,7 @@ class RunHttpRouteSurface:
             provider_model_catalog_rows=provider_model_catalog_rows,
             onboarding_rows=onboarding_rows,
             file_upload_reader=file_upload_reader,
+            file_extraction_reader=file_extraction_reader,
         )
         if outcome.accepted:
             assert outcome.accepted_response is not None
