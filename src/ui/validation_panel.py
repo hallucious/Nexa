@@ -546,6 +546,18 @@ def _beginner_next_action(*, overall_status: str, source_mode: str, app_language
     return "run", ui_text("validation.beginner.action.run", app_language=app_language)
 
 
+def _one_sentence_beginner_cause(message: str | None, *, fallback: str) -> str:
+    """Compress low-level validation detail into the beginner one-sentence cause contract."""
+    candidate = " ".join(str(message or "").split()).strip() or fallback
+    for marker in (". ", "! ", "? "):
+        marker_index = candidate.find(marker)
+        if marker_index >= 0:
+            return candidate[: marker_index + 1].strip()
+    if len(candidate) <= 180:
+        return candidate
+    return candidate[:177].rstrip() + "..."
+
+
 def _beginner_summary(
     *,
     source,
@@ -558,15 +570,22 @@ def _beginner_summary(
 ) -> BeginnerValidationSummaryView:
     if not beginner_language_enabled(source, execution_record):
         return BeginnerValidationSummaryView()
+    ready_cause = ui_text("validation.beginner.cause.ready", app_language=app_language)
     if friendly_error.visible:
         return BeginnerValidationSummaryView(
             status_signal=_beginner_status_signal("blocked", app_language=app_language),
-            cause=friendly_error.message or friendly_error.title or ui_text("validation.beginner.cause.ready", app_language=app_language),
+            cause=_one_sentence_beginner_cause(
+                friendly_error.message or friendly_error.title,
+                fallback=ready_cause,
+            ),
             next_action_type=friendly_error.action_target,
             next_action_label=friendly_error.action_label,
         )
     top_finding = all_findings[0] if all_findings else None
-    cause = top_finding.message if top_finding is not None else ui_text("validation.beginner.cause.ready", app_language=app_language)
+    cause = _one_sentence_beginner_cause(
+        top_finding.message if top_finding is not None else None,
+        fallback=ready_cause,
+    )
     action_type, action_label = _beginner_next_action(overall_status=overall_status, source_mode=source_mode, app_language=app_language)
     return BeginnerValidationSummaryView(
         status_signal=_beginner_status_signal(overall_status, app_language=app_language),
