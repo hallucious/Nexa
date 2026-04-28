@@ -1361,6 +1361,7 @@ class FrameworkRouteBindings:
         provider_probe_rows: Sequence[Mapping[str, Any]] = (),
         onboarding_rows: Sequence[Mapping[str, Any]] = (),
         artifact_source: Any | None = None,
+        file_upload_reader=None,
         run_record_writer=None,
     ) -> FrameworkOutboundResponse:
         response = RunHttpRouteSurface.handle_launch_workspace_shell(
@@ -1378,6 +1379,7 @@ class FrameworkRouteBindings:
             provider_probe_rows=list(provider_probe_rows),
             onboarding_rows=list(onboarding_rows),
             artifact_source=artifact_source,
+            file_upload_reader=file_upload_reader,
             run_record_writer=run_record_writer,
         )
         return cls.to_framework_response(response)
@@ -2137,6 +2139,56 @@ class FrameworkRouteBindings:
         return cls.to_framework_response(response)
 
     @classmethod
+    def handle_presign_file_upload(
+        cls,
+        *,
+        request: FrameworkInboundRequest,
+        workspace_id: str,
+        file_upload_store,
+    ) -> FrameworkOutboundResponse:
+        response = RunHttpRouteSurface.handle_presign_file_upload(
+            http_request=cls.to_http_route_request(request),
+            workspace_id=workspace_id,
+            file_upload_store=file_upload_store,
+        )
+        return cls.to_framework_response(response)
+
+    @classmethod
+    def handle_confirm_file_upload(
+        cls,
+        *,
+        request: FrameworkInboundRequest,
+        workspace_id: str,
+        upload_id: str,
+        file_upload_store,
+    ) -> FrameworkOutboundResponse:
+        response = RunHttpRouteSurface.handle_confirm_file_upload(
+            http_request=cls.to_http_route_request(request),
+            workspace_id=workspace_id,
+            upload_id=upload_id,
+            file_upload_store=file_upload_store,
+        )
+        return cls.to_framework_response(response)
+
+    @classmethod
+    def handle_file_upload_status(
+        cls,
+        *,
+        request: FrameworkInboundRequest,
+        workspace_id: str,
+        upload_id: str,
+        file_upload_store,
+    ) -> FrameworkOutboundResponse:
+        response = RunHttpRouteSurface.handle_file_upload_status(
+            http_request=cls.to_http_route_request(request),
+            workspace_id=workspace_id,
+            upload_id=upload_id,
+            file_upload_store=file_upload_store,
+        )
+        return cls.to_framework_response(response)
+
+
+    @classmethod
     def handle_launch(
         cls,
         *,
@@ -2155,6 +2207,7 @@ class FrameworkRouteBindings:
         provider_probe_rows: Sequence[Mapping[str, Any]] = (),
         provider_model_catalog_rows: Sequence[Mapping[str, Any]] = (),
         onboarding_rows: Sequence[Mapping[str, Any]] = (),
+        file_upload_reader=None,
         run_record_writer=None,
     ) -> FrameworkOutboundResponse:
         response = RunHttpRouteSurface.handle_launch(
@@ -2173,6 +2226,7 @@ class FrameworkRouteBindings:
             provider_probe_rows=provider_probe_rows,
             provider_model_catalog_rows=provider_model_catalog_rows,
             onboarding_rows=onboarding_rows,
+            file_upload_reader=file_upload_reader,
             run_record_writer=run_record_writer,
         )
         return cls.to_framework_response(response)

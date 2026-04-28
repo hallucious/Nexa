@@ -759,6 +759,7 @@ class FastApiRouteBindings:
                 provider_probe_rows=self.dependencies.workspace_provider_probe_rows_provider(workspace_id),
                 onboarding_rows=self.dependencies.onboarding_rows_provider(),
                 artifact_source=self.dependencies.workspace_artifact_source_provider(workspace_id),
+                file_upload_reader=self.dependencies.file_upload_store.get_workspace_upload,
                 run_record_writer=self.dependencies.run_record_writer,
             )
             return self._framework_response(outbound)
@@ -2972,6 +2973,7 @@ class FastApiRouteBindings:
                 managed_secret_rows=self.dependencies.recent_managed_secret_rows_provider(),
                 provider_probe_rows=self.dependencies.workspace_provider_probe_rows_provider(workspace_id),
                 provider_model_catalog_rows=self.dependencies.provider_model_catalog_rows_provider(),
+                file_upload_reader=self.dependencies.file_upload_store.get_workspace_upload,
                 onboarding_rows=self.dependencies.onboarding_rows_provider(),
             )
             return self._framework_response(outbound)

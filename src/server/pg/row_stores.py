@@ -1400,3 +1400,207 @@ class PostgresAppendOnlyProjectionStore:
             **dict(row),
             "metadata_json": _decode_json(row.get("metadata_json"), default=None),
         }
+
+@dataclass(frozen=True)
+class PostgresFileUploadStore:
+    engine: Engine
+
+    def write_upload(self, record) -> Any:
+        from src.server.documents.file_ingestion_store import _record_from_row
+        from src.server.documents.file_ingestion_models import FileUploadRecord
+        normalized = record if isinstance(record, FileUploadRecord) else _record_from_row(record)
+        row = normalized.to_row()
+        _execute(
+            self.engine,
+            f"""
+            INSERT INTO file_uploads (
+                upload_id,
+                workspace_id,
+                object_ref,
+                original_filename,
+                declared_mime_type,
+                declared_size_bytes,
+                upload_state,
+                document_type,
+                rejection_reason_code,
+                observed_mime_type,
+                observed_size_bytes,
+                extracted_text_char_count,
+                created_at,
+                updated_at,
+                expires_at,
+                requested_by_user_ref,
+                metadata
+            ) VALUES (
+                :upload_id,
+                :workspace_id,
+                :object_ref,
+                :original_filename,
+                :declared_mime_type,
+                :declared_size_bytes,
+                :upload_state,
+                :document_type,
+                :rejection_reason_code,
+                :observed_mime_type,
+                :observed_size_bytes,
+                :extracted_text_char_count,
+                :created_at,
+                :updated_at,
+                :expires_at,
+                :requested_by_user_ref,
+                {_json_placeholder(self.engine, 'metadata')}
+            )
+            ON CONFLICT (upload_id) DO UPDATE SET
+                workspace_id = EXCLUDED.workspace_id,
+                object_ref = EXCLUDED.object_ref,
+                original_filename = EXCLUDED.original_filename,
+                declared_mime_type = EXCLUDED.declared_mime_type,
+                declared_size_bytes = EXCLUDED.declared_size_bytes,
+                upload_state = EXCLUDED.upload_state,
+                document_type = EXCLUDED.document_type,
+                rejection_reason_code = EXCLUDED.rejection_reason_code,
+                observed_mime_type = EXCLUDED.observed_mime_type,
+                observed_size_bytes = EXCLUDED.observed_size_bytes,
+                extracted_text_char_count = EXCLUDED.extracted_text_char_count,
+                updated_at = EXCLUDED.updated_at,
+                expires_at = EXCLUDED.expires_at,
+                requested_by_user_ref = EXCLUDED.requested_by_user_ref,
+                metadata = EXCLUDED.metadata
+            """,
+            {**row, "metadata": _serialize_json(row.get("metadata") or {})},
+        )
+        return normalized
+
+    def get_upload(self, upload_id: str):
+        from src.server.documents.file_ingestion_store import _record_from_row
+        normalized = str(upload_id or "").strip()
+        if not normalized:
+            return None
+        row = _fetch_one(
+            self.engine,
+            """
+            SELECT upload_id, workspace_id, object_ref, original_filename,
+                   declared_mime_type, declared_size_bytes, upload_state,
+                   document_type, rejection_reason_code, observed_mime_type,
+                   observed_size_bytes, extracted_text_char_count, created_at,
+                   updated_at, expires_at, requested_by_user_ref, metadata
+            FROM file_uploads
+            WHERE upload_id = :upload_id
+            """,
+            {"upload_id": normalized},
+        )
+        if row is None:
+            return None
+        row["metadata"] = _decode_json(row.get("metadata"), default={})
+        return _record_from_row(row)
+
+    def get_workspace_upload(self, workspace_id: str, upload_id: str):
+        record = self.get_upload(upload_id)
+        if record is None or record.workspace_id != str(workspace_id or "").strip():
+            return None
+        return record
+
+    def list_workspace_uploads(self, workspace_id: str):
+        from src.server.documents.file_ingestion_store import _record_from_row
+        normalized = str(workspace_id or "").strip()
+        rows = _fetch_all(
+            self.engine,
+            """
+            SELECT upload_id, workspace_id, object_ref, original_filename,
+                   declared_mime_type, declared_size_bytes, upload_state,
+                   document_type, rejection_reason_code, observed_mime_type,
+                   observed_size_bytes, extracted_text_char_count, created_at,
+                   updated_at, expires_at, requested_by_user_ref, metadata
+            FROM file_uploads
+            WHERE workspace_id = :workspace_id
+            ORDER BY updated_at DESC, upload_id DESC
+            """,
+            {"workspace_id": normalized},
+        )
+        normalized_rows = []
+        for row in rows:
+            row["metadata"] = _decode_json(row.get("metadata"), default={})
+            normalized_rows.append(_record_from_row(row))
+        return tuple(normalized_rows)
+
+    def update_upload_state(
+        self,
+        *,
+        upload_id: str,
+        upload_state: str,
+        updated_at: str | None = None,
+        rejection_reason_code: str | None = None,
+        observed_mime_type: str | None = None,
+        observed_size_bytes: int | None = None,
+        extracted_text_char_count: int | None = None,
+    ):
+        existing = self.get_upload(upload_id)
+        if existing is None:
+            return None
+        from dataclasses import replace as _replace
+        updated = _replace(
+            existing,
+            upload_state=str(upload_state or "").strip().lower(),
+            updated_at=updated_at or existing.updated_at,
+            rejection_reason_code=rejection_reason_code,
+            observed_mime_type=observed_mime_type or existing.observed_mime_type,
+            observed_size_bytes=observed_size_bytes if observed_size_bytes is not None else existing.observed_size_bytes,
+            extracted_text_char_count=extracted_text_char_count if extracted_text_char_count is not None else existing.extracted_text_char_count,
+        )
+        return self.write_upload(updated)
+
+    def append_event(self, event) -> Any:
+        from src.server.documents.file_ingestion_store import _event_from_row
+        from src.server.documents.file_ingestion_models import FileUploadEventRecord
+        normalized = event if isinstance(event, FileUploadEventRecord) else _event_from_row(event)
+        row = normalized.to_row()
+        _execute(
+            self.engine,
+            f"""
+            INSERT INTO file_upload_events (
+                event_id,
+                upload_id,
+                workspace_id,
+                event_type,
+                from_state,
+                to_state,
+                reason_code,
+                created_at,
+                actor_user_ref,
+                event_metadata
+            ) VALUES (
+                :event_id,
+                :upload_id,
+                :workspace_id,
+                :event_type,
+                :from_state,
+                :to_state,
+                :reason_code,
+                :created_at,
+                :actor_user_ref,
+                {_json_placeholder(self.engine, 'event_metadata')}
+            )
+            """,
+            {**row, "event_metadata": _serialize_json(row.get("event_metadata") or {})},
+        )
+        return normalized
+
+    def list_events(self, upload_id: str):
+        from src.server.documents.file_ingestion_store import _event_from_row
+        normalized = str(upload_id or "").strip()
+        rows = _fetch_all(
+            self.engine,
+            """
+            SELECT event_id, upload_id, workspace_id, event_type, from_state,
+                   to_state, reason_code, created_at, actor_user_ref, event_metadata
+            FROM file_upload_events
+            WHERE upload_id = :upload_id
+            ORDER BY created_at ASC, event_id ASC
+            """,
+            {"upload_id": normalized},
+        )
+        normalized_rows = []
+        for row in rows:
+            row["event_metadata"] = _decode_json(row.get("event_metadata"), default={})
+            normalized_rows.append(_event_from_row(row))
+        return tuple(normalized_rows)

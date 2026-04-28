@@ -85,6 +85,8 @@ from src.storage.share_api import (
 from src.storage.nex_api import describe_public_nex_artifact, get_public_nex_format_boundary
 from src.ui.i18n import normalize_ui_language, ui_text
 from src.designer.proposal_flow import get_starter_circuit_template, list_starter_circuit_templates
+from src.server.documents.file_ingestion_api import FileIngestionService, response_to_payload
+from src.server.documents.file_ingestion_models import FileUploadConfirmRequest, FileUploadPresignRequest
 
 
 def _to_jsonable(value: Any) -> Any:
@@ -1930,11 +1932,43 @@ def _parse_management_share_ids(body: Any) -> tuple[tuple[str, ...] | None, Http
     return tuple(resolved), None
 
 
+def _session_claims_from_headers(headers: Mapping[str, Any] | None) -> Mapping[str, Any] | None:
+    header_map = {str(key).lower(): str(value) for key, value in (headers or {}).items() if value is not None}
+    raw_claims = header_map.get("x-nexa-session-claims")
+    if not raw_claims:
+        return None
+    try:
+        parsed = json.loads(raw_claims)
+    except json.JSONDecodeError:
+        return None
+    if not isinstance(parsed, Mapping):
+        return None
+    claims: dict[str, Any] = dict(parsed)
+    user_ref = str(claims.get("sub") or claims.get("user_id") or claims.get("user_ref") or "").strip()
+    if not user_ref:
+        return claims
+    claims.setdefault("sub", user_ref)
+    claims.setdefault("session_id", claims.get("sid") or claims.get("session") or "http-route-session")
+    claims.setdefault("exp", 4102444800)
+    if "roles" not in claims and "role_refs" in claims:
+        claims["roles"] = claims.get("role_refs")
+    return claims
+
+
 def _request_auth(request: HttpRouteRequest):
-    return RequestAuthResolver.resolve(
-        headers=request.headers,
-        session_claims=request.session_claims,
-    )
+    session_claims = request.session_claims
+    if session_claims is None:
+        session_claims = _session_claims_from_headers(request.headers)
+    try:
+        return RequestAuthResolver.resolve(
+            headers=request.headers,
+            session_claims=session_claims,
+        )
+    except ValueError:
+        return RequestAuthResolver.resolve(
+            headers=request.headers,
+            session_claims=None,
+        )
 
 
 def _public_sdk_catalog_identity_policy_body() -> dict[str, Any]:
@@ -2629,6 +2663,7 @@ class RunHttpRouteSurface:
         provider_probe_rows: list[Mapping[str, Any]] | tuple[Mapping[str, Any], ...] = (),
         onboarding_rows: list[Mapping[str, Any]] | tuple[Mapping[str, Any], ...] = (),
         artifact_source: Any | None = None,
+        file_upload_reader=None,
         run_record_writer=None,
     ) -> HttpRouteResponse:
         guard = cls._workspace_shell_launch_guard(
@@ -2699,6 +2734,7 @@ class RunHttpRouteSurface:
             managed_secret_rows=managed_secret_rows,
             provider_probe_rows=provider_probe_rows,
             onboarding_rows=onboarding_rows,
+            file_upload_reader=file_upload_reader,
             run_record_writer=run_record_writer,
         )
         if isinstance(response.body, Mapping):
@@ -5338,6 +5374,112 @@ class RunHttpRouteSurface:
         })
 
 
+    @staticmethod
+    def _parse_file_upload_presign_request(http_request: HttpRouteRequest, *, workspace_id: str) -> FileUploadPresignRequest:
+        body = http_request.json_body
+        if not isinstance(body, Mapping):
+            raise ValueError("file_upload.request_body_invalid")
+        request_auth = _request_auth(http_request)
+        return FileUploadPresignRequest(
+            workspace_id=workspace_id,
+            filename=str(body.get("filename") or body.get("original_filename") or "").strip(),
+            declared_mime_type=str(body.get("declared_mime_type") or body.get("mime_type") or "").strip(),
+            declared_size_bytes=int(body.get("declared_size_bytes") or body.get("size_bytes") or 0),
+            requested_by_user_ref=request_auth.requested_by_user_ref,
+            client_context=body.get("client_context") if isinstance(body.get("client_context"), Mapping) else {},
+        )
+
+    @staticmethod
+    def _parse_file_upload_confirm_request(http_request: HttpRouteRequest, *, workspace_id: str, upload_id: str) -> FileUploadConfirmRequest:
+        body = http_request.json_body or {}
+        if not isinstance(body, Mapping):
+            raise ValueError("file_upload.request_body_invalid")
+        return FileUploadConfirmRequest(
+            workspace_id=workspace_id,
+            upload_id=upload_id,
+            observed_size_bytes=int(body.get("observed_size_bytes")) if body.get("observed_size_bytes") is not None else None,
+            observed_mime_type=str(body.get("observed_mime_type") or body.get("mime_type") or "").strip() or None,
+            magic_bytes_hex=str(body.get("magic_bytes_hex") or "").strip() or None,
+            malware_scan_status=str(body.get("malware_scan_status") or "clean"),
+            extracted_text_char_count=int(body.get("extracted_text_char_count") or 0),
+        )
+
+    @classmethod
+    def handle_presign_file_upload(
+        cls,
+        *,
+        http_request: HttpRouteRequest,
+        workspace_id: str,
+        file_upload_store,
+    ) -> HttpRouteResponse:
+        expected_path = f"/api/workspaces/{workspace_id}/uploads/presign"
+        if http_request.method != "POST":
+            return _route_response(405, {"error_family": "route_error", "reason_code": "route.method_not_allowed", "message": "File upload presign route only supports POST."})
+        if http_request.path.rstrip("/") != expected_path:
+            return _route_response(404, {"error_family": "route_error", "reason_code": "route.not_found", "message": "Requested route was not found."})
+        request_auth = _request_auth(http_request)
+        if not request_auth.is_authenticated or not request_auth.requested_by_user_ref:
+            return _route_response(401, {"status": "rejected", "error_family": "product_rejection", "reason_code": "file_upload.authentication_required", "message": "Authenticated file upload is required."})
+        try:
+            upload_request = cls._parse_file_upload_presign_request(http_request, workspace_id=workspace_id)
+        except Exception as exc:  # noqa: BLE001
+            return _route_response(400, {"status": "rejected", "error_family": "product_rejection", "reason_code": getattr(exc, "args", ["file_upload.invalid_request"])[0] or "file_upload.invalid_request", "message": "File upload presign payload is invalid.", "workspace_id": workspace_id})
+        response = FileIngestionService.presign(upload_request, store=file_upload_store)
+        payload = response_to_payload(response)
+        if payload.get("status") == "rejected":
+            payload["error_family"] = "product_rejection"
+            return _route_response(_reason_to_status_code(str(payload.get("reason_code") or "file_upload.rejected")), payload)
+        return _route_response(202, payload)
+
+    @classmethod
+    def handle_confirm_file_upload(
+        cls,
+        *,
+        http_request: HttpRouteRequest,
+        workspace_id: str,
+        upload_id: str,
+        file_upload_store,
+    ) -> HttpRouteResponse:
+        expected_path = f"/api/workspaces/{workspace_id}/uploads/{upload_id}/confirm"
+        if http_request.method != "POST":
+            return _route_response(405, {"error_family": "route_error", "reason_code": "route.method_not_allowed", "message": "File upload confirm route only supports POST."})
+        if http_request.path.rstrip("/") != expected_path:
+            return _route_response(404, {"error_family": "route_error", "reason_code": "route.not_found", "message": "Requested route was not found."})
+        request_auth = _request_auth(http_request)
+        if not request_auth.is_authenticated or not request_auth.requested_by_user_ref:
+            return _route_response(401, {"status": "rejected", "error_family": "product_rejection", "reason_code": "file_upload.authentication_required", "message": "Authenticated file upload confirmation is required."})
+        try:
+            confirm_request = cls._parse_file_upload_confirm_request(http_request, workspace_id=workspace_id, upload_id=upload_id)
+        except Exception as exc:  # noqa: BLE001
+            return _route_response(400, {"status": "rejected", "error_family": "product_rejection", "reason_code": getattr(exc, "args", ["file_upload.invalid_request"])[0] or "file_upload.invalid_request", "message": "File upload confirm payload is invalid.", "workspace_id": workspace_id, "upload_id": upload_id})
+        response = FileIngestionService.confirm(confirm_request, store=file_upload_store)
+        payload = response_to_payload(response)
+        if isinstance(payload.get("upload"), dict) and payload.get("status") == "rejected":
+            payload["error_family"] = "product_rejection"
+        return _route_response(200 if payload.get("status") in {"safe", "rejected"} else 202, payload)
+
+    @classmethod
+    def handle_file_upload_status(
+        cls,
+        *,
+        http_request: HttpRouteRequest,
+        workspace_id: str,
+        upload_id: str,
+        file_upload_store,
+    ) -> HttpRouteResponse:
+        expected_path = f"/api/workspaces/{workspace_id}/uploads/{upload_id}"
+        if http_request.method != "GET":
+            return _route_response(405, {"error_family": "route_error", "reason_code": "route.method_not_allowed", "message": "File upload status route only supports GET."})
+        if http_request.path.rstrip("/") != expected_path:
+            return _route_response(404, {"error_family": "route_error", "reason_code": "route.not_found", "message": "Requested route was not found."})
+        response = FileIngestionService.status(workspace_id=workspace_id, upload_id=upload_id, store=file_upload_store)
+        payload = response_to_payload(response)
+        if payload.get("status") == "rejected" and payload.get("reason_code") == "file_upload.not_found":
+            payload["error_family"] = "product_rejection"
+            return _route_response(404, payload)
+        return _route_response(200, payload)
+
+
     @classmethod
     def handle_launch(
         cls,
@@ -5357,6 +5499,7 @@ class RunHttpRouteSurface:
         provider_probe_rows: list[Mapping[str, Any]] | tuple[Mapping[str, Any], ...] = (),
         provider_model_catalog_rows: Sequence[Mapping[str, Any]] = (),
         onboarding_rows: list[Mapping[str, Any]] | tuple[Mapping[str, Any], ...] = (),
+        file_upload_reader=None,
         run_record_writer=None,
     ) -> HttpRouteResponse:
         if http_request.method != "POST":
@@ -5393,6 +5536,7 @@ class RunHttpRouteSurface:
             provider_probe_rows=provider_probe_rows,
             provider_model_catalog_rows=provider_model_catalog_rows,
             onboarding_rows=onboarding_rows,
+            file_upload_reader=file_upload_reader,
         )
         if outcome.accepted:
             assert outcome.accepted_response is not None

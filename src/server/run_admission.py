@@ -8,6 +8,7 @@ from uuid import uuid4
 from src.server.adapters import EngineLaunchAdapter
 from src.server.provider_setup_readiness import evaluate_required_provider_setup
 from src.server.provider_catalog_runtime import evaluate_provider_model_access_for_artifact
+from src.server.documents.file_reference_gate import evaluate_input_file_upload_safety
 from src.server.auth_adapter import AuthorizationGate, build_engine_auth_context_refs
 from src.server.auth_models import AuthorizationInput, RequestAuthContext, WorkspaceAuthorizationContext
 from src.server.boundary_models import EngineRunLaunchRequest, EngineRunLaunchResponse
@@ -242,6 +243,7 @@ class RunAdmissionService:
         provider_probe_rows: Sequence[Mapping[str, Any]] = (),
         provider_model_catalog_rows: Sequence[Mapping[str, Any]] | None = None,
         onboarding_rows: Sequence[Mapping[str, Any]] = (),
+        file_upload_reader: Optional[Callable[[str, str], Any | None]] = None,
     ) -> RunAdmissionOutcome:
         workspace_title, provider_continuity, activity_continuity = _continuity_projection_for_workspace(
             request.workspace_id,
@@ -361,6 +363,24 @@ class RunAdmissionService:
                     activity_continuity=activity_continuity,
                     blocking_findings=tuple(decision.to_payload() for decision in blocking_decisions),
                 )
+
+        file_upload_decisions = evaluate_input_file_upload_safety(
+            workspace_id=request.workspace_id,
+            input_payload=request.input_payload,
+            file_upload_reader=file_upload_reader,
+        )
+        blocking_file_upload_decisions = tuple(decision for decision in file_upload_decisions if not decision.allowed)
+        if blocking_file_upload_decisions:
+            primary_file_decision = blocking_file_upload_decisions[0]
+            return cls._reject(
+                workspace_id=request.workspace_id,
+                reason_code=primary_file_decision.reason_code,
+                message=primary_file_decision.message,
+                workspace_title=workspace_title,
+                provider_continuity=provider_continuity,
+                activity_continuity=activity_continuity,
+                blocking_findings=tuple(decision.to_payload() for decision in blocking_file_upload_decisions),
+            )
 
         run_request_id_factory = run_request_id_factory or (lambda: f"req_{uuid4().hex}")
         run_id_factory = run_id_factory or (lambda: f"run_{uuid4().hex}")
