@@ -1450,6 +1450,44 @@ def _first_success_flow_section(
     return section
 
 
+
+def _return_use_reentry_context_from_request(
+    request: Mapping[str, Any] | None,
+    *,
+    workspace_id: str,
+    result_rows_by_run_id: Mapping[str, Mapping[str, Any]] | None,
+    app_language: str,
+) -> dict[str, Any] | None:
+    if not isinstance(request, Mapping):
+        return None
+    return_use = str(request.get("return_use") or "").strip()
+    if return_use != "selected_result":
+        return None
+    run_id = str(request.get("run_id") or "").strip()
+    if not run_id:
+        return None
+    result_row = dict((result_rows_by_run_id or {}).get(run_id) or {})
+    if result_row and str(result_row.get("workspace_id") or workspace_id).strip() not in {"", workspace_id}:
+        return None
+    final_output = result_row.get("final_output") if isinstance(result_row.get("final_output"), Mapping) else {}
+    output_ref = str(result_row.get("output_ref") or final_output.get("output_key") or request.get("output_ref") or "").strip() or None
+    summary = str(result_row.get("result_summary") or result_row.get("final_status") or "").strip() or None
+    result_state = str(result_row.get("result_state") or "selected_result").strip() or "selected_result"
+    workspace_href = f"/app/workspaces/{workspace_id}?app_language={app_language}&return_use=selected_result&run_id={run_id}"
+    result_href = f"/app/workspaces/{workspace_id}/results?app_language={app_language}&run_id={run_id}"
+    return {
+        "source": "result_history",
+        "source_label": ui_text("server.shell.return_use_selected_source_label", app_language=app_language, fallback_text="Selected result"),
+        "run_id": run_id,
+        "output_ref": output_ref,
+        "result_state": result_state,
+        "summary": summary or ui_text("server.shell.return_use_selected_summary", app_language=app_language, fallback_text="Continue with the selected result as the current return-use context."),
+        "workspace_href": workspace_href,
+        "result_href": result_href,
+        "action_label": ui_text("server.shell.return_use_selected_action", app_language=app_language, fallback_text="Continue with selected result"),
+        "open_result_label": ui_text("server.shell.return_use_selected_open_result", app_language=app_language, fallback_text="Reopen selected result"),
+    }
+
 def _return_use_continuity_section(
     server_product_readiness_review: Mapping[str, Any] | None,
     *,
@@ -1460,6 +1498,7 @@ def _return_use_continuity_section(
     workspace_id: str,
     routes: Mapping[str, Any],
     app_language: str = "en",
+    selected_result_reentry_context: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
     result_rows_by_run_id = result_rows_by_run_id or {}
     return_stage = {}
@@ -1523,6 +1562,18 @@ def _return_use_continuity_section(
         _append_control("return-use-open-results", ui_text("server.shell.open_result_history_page", app_language=app_language, fallback_text="Open result history page"), result_history_target)
         _append_control("return-use-open-feedback", ui_text("server.shell.open_feedback_page", app_language=app_language, fallback_text="Open feedback page"), feedback_target)
 
+    if selected_result_reentry_context:
+        _append_control(
+            "return-use-continue-selected-result",
+            str(selected_result_reentry_context.get("action_label") or ui_text("server.shell.return_use_selected_action", app_language=app_language, fallback_text="Continue with selected result")),
+            str(selected_result_reentry_context.get("workspace_href") or "").strip() or None,
+        )
+        _append_control(
+            "return-use-reopen-selected-result",
+            str(selected_result_reentry_context.get("open_result_label") or ui_text("server.shell.return_use_selected_open_result", app_language=app_language, fallback_text="Reopen selected result")),
+            str(selected_result_reentry_context.get("result_href") or "").strip() or None,
+        )
+
     path_fallbacks = {
         "first_success_prerequisite": "First-success prerequisite",
         "result_history_setup": "Result history setup",
@@ -1567,12 +1618,15 @@ def _return_use_continuity_section(
         ui_text("server.shell.return_use_current_step_prefix", app_language=app_language, fallback_text="Current step: {step}", step=current_step_label),
         ui_text("server.shell.return_use_next_step_prefix", app_language=app_language, fallback_text="Next after this: {step}", step=next_step_label) if next_step_label else None,
         return_summary or None,
+        ui_text("server.shell.return_use_selected_result_prefix", app_language=app_language, fallback_text="Selected result: {run_id}", run_id=str(selected_result_reentry_context.get("run_id") or "")) if selected_result_reentry_context else None,
+        ui_text("server.shell.return_use_selected_output_prefix", app_language=app_language, fallback_text="Selected output: {output_ref}", output_ref=str(selected_result_reentry_context.get("output_ref") or "")) if selected_result_reentry_context and selected_result_reentry_context.get("output_ref") else None,
         ui_text("server.shell.return_use_recent_runs_prefix", app_language=app_language, fallback_text="Recent runs: {count}", count=str(len(recent_runs))),
         ui_text("server.shell.return_use_recent_results_prefix", app_language=app_language, fallback_text="Recent results: {count}", count=str(len(result_entries))),
         ui_text("server.shell.return_use_feedback_prefix", app_language=app_language, fallback_text="Feedback items: {count}", count=str(feedback_count)),
     )
     detail_items = _summary_lines(
         ui_text("server.shell.return_use_step_order_prefix", app_language=app_language, fallback_text="Step order: {steps}", steps=step_order_summary),
+        ui_text("server.shell.return_use_selected_summary_prefix", app_language=app_language, fallback_text="Selected result summary: {summary}", summary=str(selected_result_reentry_context.get("summary") or "")) if selected_result_reentry_context and selected_result_reentry_context.get("summary") else None,
         ui_text("server.shell.return_use_onboarding_prefix", app_language=app_language, fallback_text="Onboarding step: {step}", step=onboarding_step) if onboarding_step else None,
         ui_text("server.shell.return_use_latest_run_prefix", app_language=app_language, fallback_text="Latest run: {run_id}", run_id=str(recent_runs[0].get("run_id") or "").strip()) if recent_runs else None,
         ui_text("server.shell.return_use_latest_result_prefix", app_language=app_language, fallback_text="Latest result: {state}", state=str(latest_result.get("result_state") or "unknown")) if latest_result else None,
@@ -1597,6 +1651,7 @@ def _return_use_continuity_section(
     section["recommended_action_label"] = return_stage.get("recommended_action_label")
     section["blocker_count"] = int(return_stage.get("blocker_count") or 0)
     section["pending_count"] = int(return_stage.get("pending_count") or 0)
+    section["selected_result_reentry_context"] = dict(selected_result_reentry_context) if selected_result_reentry_context else None
     return section
 
 
@@ -3505,6 +3560,7 @@ def build_workspace_shell_runtime_payload(
     provider_probe_rows: Sequence[Mapping[str, Any]] = (),
     feedback_rows: Sequence[Mapping[str, Any]] = (),
     app_language_override: str | None = None,
+    return_use_reentry_request: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
     source = resolve_workspace_artifact_source(workspace_row, artifact_source)
     model, loaded = _load_workspace_model(source, workspace_row)
@@ -3537,6 +3593,12 @@ def build_workspace_shell_runtime_payload(
     latest_run_result_preview = _latest_run_result_preview(latest_run_row, result_rows_by_run_id)
     latest_run_artifacts_preview = _latest_run_artifacts_preview(latest_run_row, artifact_rows_lookup)
     latest_run_trace_preview = _latest_run_trace_preview(latest_run_row, trace_rows_lookup)
+    selected_result_reentry_context = _return_use_reentry_context_from_request(
+        return_use_reentry_request,
+        workspace_id=workspace_id,
+        result_rows_by_run_id=result_rows_by_run_id,
+        app_language=app_language,
+    )
 
     navigation = _navigation_model(
         asdict(shell_vm),
@@ -3640,7 +3702,8 @@ def build_workspace_shell_runtime_payload(
         "first_success_setup_section": _first_success_setup_section(asdict(shell_vm), asdict(template_gallery) if template_gallery is not None else None, server_product_readiness_review, onboarding_state=onboarding_state, provider_binding_rows=provider_binding_rows, managed_secret_rows=managed_secret_rows, provider_probe_rows=provider_probe_rows, workspace_id=workspace_id, routes=routes, app_language=app_language, persisted_state=server_backed_state.get("designer")),
         "first_success_run_section": _first_success_run_section(asdict(shell_vm), server_product_readiness_review, latest_run_status_preview=latest_run_status_preview, latest_run_result_preview=latest_run_result_preview, latest_run_trace_preview=latest_run_trace_preview, latest_run_artifacts_preview=latest_run_artifacts_preview, onboarding_state=onboarding_state, workspace_id=workspace_id, routes=routes, app_language=app_language),
         "first_success_flow_section": _first_success_flow_section(asdict(shell_vm), routes, app_language=app_language),
-        "return_use_continuity_section": _return_use_continuity_section(server_product_readiness_review, recent_run_rows=recent_run_rows, result_rows_by_run_id=result_rows_by_run_id, feedback_rows=feedback_rows, onboarding_state=onboarding_state, workspace_id=workspace_id, routes=routes, app_language=app_language),
+        "return_use_continuity_section": _return_use_continuity_section(server_product_readiness_review, recent_run_rows=recent_run_rows, result_rows_by_run_id=result_rows_by_run_id, feedback_rows=feedback_rows, onboarding_state=onboarding_state, workspace_id=workspace_id, routes=routes, app_language=app_language, selected_result_reentry_context=selected_result_reentry_context),
+        "return_use_reentry_context": selected_result_reentry_context,
         "product_surface_review_section": _product_surface_review_section(server_product_readiness_review, feedback_rows, workspace_id, routes=routes, app_language=app_language),
         "feedback_continuity_section": _feedback_continuity_section(server_product_readiness_review, feedback_rows, workspace_id, recent_run_rows=recent_run_rows, onboarding_state=onboarding_state, routes=routes, app_language=app_language),
         "share_history_section": _share_history_section(share_payload_rows, model, workspace_id, app_language=app_language),
@@ -3683,6 +3746,32 @@ def render_workspace_shell_runtime_html(payload: Mapping[str, Any]) -> str:
     mobile = shell.get("mobile_first_run") or {}
     template_gallery = payload.get("template_gallery") or {}
     routes = payload.get("routes") or {}
+    return_use_reentry_context = payload.get("return_use_reentry_context") if isinstance(payload.get("return_use_reentry_context"), Mapping) else {}
+    return_use_reentry_hidden_attr = "" if return_use_reentry_context else " hidden"
+    return_use_reentry_source_attr = escape(str(return_use_reentry_context.get("source") or ""))
+    return_use_reentry_run_id_attr = escape(str(return_use_reentry_context.get("run_id") or ""))
+    return_use_reentry_output_ref_attr = escape(str(return_use_reentry_context.get("output_ref") or ""))
+    return_use_reentry_summary_text = "\n".join(
+        item
+        for item in (
+            str(return_use_reentry_context.get("source_label") or "").strip(),
+            f"Run: {return_use_reentry_context.get('run_id')}" if return_use_reentry_context.get("run_id") else "",
+            f"Output: {return_use_reentry_context.get('output_ref')}" if return_use_reentry_context.get("output_ref") else "",
+            str(return_use_reentry_context.get("summary") or "").strip(),
+        )
+        if item
+    ) or ui_text("server.shell.return_use_selected_pending", app_language=app_language, fallback_text="No selected result return-use context.")
+    return_use_reentry_controls_html = ""
+    if return_use_reentry_context.get("workspace_href"):
+        return_use_reentry_controls_html += (
+            f'<a id="continue-with-selected-result" class="button" href="{escape(str(return_use_reentry_context.get("workspace_href") or ""))}">'
+            f'{escape(str(return_use_reentry_context.get("action_label") or ui_text("server.shell.return_use_selected_action", app_language=app_language, fallback_text="Continue with selected result")))}</a>'
+        )
+    if return_use_reentry_context.get("result_href"):
+        return_use_reentry_controls_html += (
+            f'<a id="reopen-selected-result" class="button secondary" href="{escape(str(return_use_reentry_context.get("result_href") or ""))}">'
+            f'{escape(str(return_use_reentry_context.get("open_result_label") or ui_text("server.shell.return_use_selected_open_result", app_language=app_language, fallback_text="Reopen selected result")))}</a>'
+        )
     launch_template_json = json.dumps(payload.get("launch_request_template"), ensure_ascii=False)
     payload_json = json.dumps(payload, ensure_ascii=False)
     latest_run_status_preview_json = json.dumps(payload.get("latest_run_status_preview"), ensure_ascii=False)
@@ -3708,6 +3797,7 @@ def render_workspace_shell_runtime_html(payload: Mapping[str, Any]) -> str:
     first_success_run_section_json = json.dumps(payload.get("first_success_run_section"), ensure_ascii=False)
     first_success_flow_section_json = json.dumps(payload.get("first_success_flow_section"), ensure_ascii=False)
     return_use_continuity_section_json = json.dumps(payload.get("return_use_continuity_section"), ensure_ascii=False)
+    return_use_reentry_context_json = json.dumps(payload.get("return_use_reentry_context"), ensure_ascii=False)
     product_surface_review_section_json = json.dumps(payload.get("product_surface_review_section"), ensure_ascii=False)
     feedback_continuity_section_json = json.dumps(payload.get("feedback_continuity_section"), ensure_ascii=False)
     designer_section_json = json.dumps(payload.get("designer_section"), ensure_ascii=False)
@@ -3748,6 +3838,7 @@ def render_workspace_shell_runtime_html(payload: Mapping[str, Any]) -> str:
         'templateLoadedSummaryPrefix': ui_text('server.shell.template_loaded_summary_prefix', app_language=app_language, fallback_text='Template "'),
         'templateLoadedSummarySuffix': ui_text('server.shell.template_loaded_summary_suffix', app_language=app_language, fallback_text='" is loaded into Designer. Review the draft, then continue to Validation.'),
         'openNextStep': ui_text('server.shell.open_next_step', app_language=app_language, fallback_text='Open next step'),
+        'noSelectedReturnUseContext': ui_text('server.shell.return_use_selected_pending', app_language=app_language, fallback_text='No selected result return-use context.'),
         'openDesigner': ui_text('server.shell.open_designer', app_language=app_language, fallback_text='Open Designer'),
         'openStatus': ui_text('server.shell.open_status', app_language=app_language, fallback_text='Open Status'),
         'openResult': ui_text('server.shell.open_result', app_language=app_language, fallback_text='Open Result'),
@@ -4005,6 +4096,11 @@ def render_workspace_shell_runtime_html(payload: Mapping[str, Any]) -> str:
         <pre id="return-use-continuity-detail">{escape(ui_text("server.shell.return_use_continuity_detail", app_language=app_language, fallback_text="Return-use continuity detail will appear here."))}</pre>
         <div id="return-use-continuity-controls" class="actions"></div>
       </section>
+      <section id="return-use-selected-result-card" tabindex="-1" class="card focus-target" role="region" aria-labelledby="return-use-selected-result-title" data-return-use-source="{return_use_reentry_source_attr}" data-return-use-run-id="{return_use_reentry_run_id_attr}" data-output-ref="{return_use_reentry_output_ref_attr}"{return_use_reentry_hidden_attr}>
+        <h2 id="return-use-selected-result-title">{escape(ui_text("server.shell.return_use_selected_title", app_language=app_language, fallback_text="Selected result context"))}</h2>
+        <pre id="return-use-selected-result-summary">{escape(return_use_reentry_summary_text)}</pre>
+        <div id="return-use-selected-result-controls" class="actions">{return_use_reentry_controls_html}</div>
+      </section>
       <section id="product-surface-review-card" tabindex="-1" class="card focus-target" role="region" aria-labelledby="product-surface-review-title">
         <h2 id="product-surface-review-title">{escape(ui_text("server.shell.product_surface_review", app_language=app_language, fallback_text="Product surface review"))}</h2>
         <pre id="product-surface-review-summary">{escape(ui_text("server.shell.product_surface_review_summary", app_language=app_language, fallback_text="Product surface review will appear here."))}</pre>
@@ -4050,6 +4146,7 @@ def render_workspace_shell_runtime_html(payload: Mapping[str, Any]) -> str:
     const initialFirstSuccessRunSection = {first_success_run_section_json};
     const initialFirstSuccessFlowSection = {first_success_flow_section_json};
     const initialReturnUseContinuitySection = {return_use_continuity_section_json};
+    const initialReturnUseReentryContext = {return_use_reentry_context_json};
     const initialProductSurfaceReviewSection = {product_surface_review_section_json};
     const initialFeedbackContinuitySection = {feedback_continuity_section_json};
     const initialDesignerSection = {designer_section_json};
@@ -4100,6 +4197,9 @@ def render_workspace_shell_runtime_html(payload: Mapping[str, Any]) -> str:
     const returnUseContinuitySummaryEl = document.getElementById('return-use-continuity-summary');
     const returnUseContinuityDetailEl = document.getElementById('return-use-continuity-detail');
     const returnUseContinuityControlsEl = document.getElementById('return-use-continuity-controls');
+    const returnUseSelectedResultCardEl = document.getElementById('return-use-selected-result-card');
+    const returnUseSelectedResultSummaryEl = document.getElementById('return-use-selected-result-summary');
+    const returnUseSelectedResultControlsEl = document.getElementById('return-use-selected-result-controls');
     const productSurfaceReviewSummaryEl = document.getElementById('product-surface-review-summary');
     const productSurfaceReviewDetailEl = document.getElementById('product-surface-review-detail');
     const productSurfaceReviewControlsEl = document.getElementById('product-surface-review-controls');
@@ -4430,6 +4530,44 @@ def render_workspace_shell_runtime_html(payload: Mapping[str, Any]) -> str:
     function writeFirstSuccessFlowSection(section) {{
       currentFirstSuccessFlowSection = writeShellSection(section, currentFirstSuccessFlowSection, firstSuccessFlowSummaryEl, firstSuccessFlowDetailEl, firstSuccessFlowControlsEl, 'First-success flow guidance will appear here once the workspace shell is available.', 'First-success flow guidance will appear here once the workspace shell is available.');
     }}
+    function writeReturnUseReentryContext(context) {{
+      if (!returnUseSelectedResultCardEl || !returnUseSelectedResultSummaryEl || !returnUseSelectedResultControlsEl) return;
+      if (!context || !context.run_id) {{
+        returnUseSelectedResultCardEl.hidden = true;
+        returnUseSelectedResultSummaryEl.textContent = localizedUi.noSelectedReturnUseContext || 'No selected result return-use context.';
+        returnUseSelectedResultControlsEl.innerHTML = '';
+        return;
+      }}
+      returnUseSelectedResultCardEl.hidden = false;
+      returnUseSelectedResultCardEl.dataset.returnUseSource = String(context.source || 'result_history');
+      returnUseSelectedResultCardEl.dataset.returnUseRunId = String(context.run_id || '');
+      returnUseSelectedResultCardEl.dataset.outputRef = String(context.output_ref || '');
+      const summaryLines = [
+        context.source_label ? String(context.source_label) : null,
+        context.run_id ? 'Run: ' + String(context.run_id) : null,
+        context.output_ref ? 'Output: ' + String(context.output_ref) : null,
+        context.summary ? String(context.summary) : null,
+      ].filter(Boolean);
+      returnUseSelectedResultSummaryEl.textContent = summaryLines.join('\n');
+      returnUseSelectedResultControlsEl.innerHTML = '';
+      if (context.workspace_href) {{
+        const link = document.createElement('a');
+        link.className = 'button';
+        link.id = 'continue-with-selected-result';
+        link.href = String(context.workspace_href);
+        link.textContent = String(context.action_label || 'Continue with selected result');
+        returnUseSelectedResultControlsEl.appendChild(link);
+      }}
+      if (context.result_href) {{
+        const link = document.createElement('a');
+        link.className = 'button secondary';
+        link.id = 'reopen-selected-result';
+        link.href = String(context.result_href);
+        link.textContent = String(context.open_result_label || 'Reopen selected result');
+        returnUseSelectedResultControlsEl.appendChild(link);
+      }}
+    }}
+
     function writeReturnUseContinuitySection(section) {{
       currentReturnUseContinuitySection = writeShellSection(section, currentReturnUseContinuitySection, returnUseContinuitySummaryEl, returnUseContinuityDetailEl, returnUseContinuityControlsEl, 'Return-use continuity will appear here.', 'Return-use continuity detail will appear here.');
     }}
@@ -4462,6 +4600,7 @@ def render_workspace_shell_runtime_html(payload: Mapping[str, Any]) -> str:
       if (body.first_success_run_section) writeFirstSuccessRunSection(body.first_success_run_section);
       if (body.first_success_flow_section) writeFirstSuccessFlowSection(body.first_success_flow_section);
       if (body.return_use_continuity_section) writeReturnUseContinuitySection(body.return_use_continuity_section);
+      if (body.return_use_reentry_context !== undefined) writeReturnUseReentryContext(body.return_use_reentry_context);
       if (body.product_surface_review_section) writeProductSurfaceReviewSection(body.product_surface_review_section);
       if (body.feedback_continuity_section) writeFeedbackContinuitySection(body.feedback_continuity_section);
       if (body.designer_section) writeDesignerSection(body.designer_section);
@@ -4917,6 +5056,7 @@ def render_workspace_shell_runtime_html(payload: Mapping[str, Any]) -> str:
     writeFirstSuccessRunSection(initialFirstSuccessRunSection);
     writeFirstSuccessFlowSection(initialFirstSuccessFlowSection);
     writeReturnUseContinuitySection(initialReturnUseContinuitySection);
+    writeReturnUseReentryContext(initialReturnUseReentryContext);
     writeProductSurfaceReviewSection(initialProductSurfaceReviewSection);
     writeFeedbackContinuitySection(initialFeedbackContinuitySection);
     writeDesignerSection(initialDesignerSection);

@@ -953,6 +953,19 @@ def test_fastapi_binding_workspace_shell_route_round_trip() -> None:
     assert payload['return_use_continuity_section']['current_step_id'] == 'reopen_result'
     assert any(line.startswith('Current path: Result reentry') for line in payload['return_use_continuity_section']['summary']['lines'])
     assert payload['return_use_continuity_section']['controls'][0]['action_target'] == '/app/workspaces/ws-001/results?app_language=en'
+
+    reentry_response = client.get('/api/workspaces/ws-001/shell?app_language=en&return_use=selected_result&run_id=run-002', headers=_session_headers())
+    assert reentry_response.status_code == 200
+    reentry_payload = reentry_response.json()
+    assert reentry_payload['return_use_reentry_context']['source'] == 'result_history'
+    assert reentry_payload['return_use_reentry_context']['run_id'] == 'run-002'
+    assert reentry_payload['return_use_reentry_context']['output_ref'] == 'answer'
+    assert reentry_payload['return_use_continuity_section']['selected_result_reentry_context']['run_id'] == 'run-002'
+    assert 'Selected result: run-002' in reentry_payload['return_use_continuity_section']['summary']['lines']
+    assert 'Selected output: answer' in reentry_payload['return_use_continuity_section']['summary']['lines']
+    assert any(control['control_id'] == 'return-use-continue-selected-result' for control in reentry_payload['return_use_continuity_section']['controls'])
+    assert any(control['control_id'] == 'return-use-reopen-selected-result' for control in reentry_payload['return_use_continuity_section']['controls'])
+
     assert payload['product_surface_review_section']['summary']['headline'] == 'Product surface review'
     assert payload['product_surface_review_section']['review_state'] == 'product_surface_stable'
     assert payload['product_surface_review_section']['product_path_family'] == 'feedback'
@@ -1899,6 +1912,16 @@ def test_fastapi_binding_workspace_result_history_routes_round_trip() -> None:
     assert 'data-return-use-run-id="run-002"' in page_response.text
     assert 'return-use-selected-result' in page_response.text
     assert '/app/workspaces/ws-001?app_language=en&amp;return_use=selected_result&amp;run_id=run-002' in page_response.text
+
+    workspace_reentry_page = client.get('/app/workspaces/ws-001?app_language=en&return_use=selected_result&run_id=run-002', headers=_session_headers())
+    assert workspace_reentry_page.status_code == 200
+    assert 'return-use-selected-result-card' in workspace_reentry_page.text
+    assert 'data-return-use-source="result_history"' in workspace_reentry_page.text
+    assert 'data-return-use-run-id="run-002"' in workspace_reentry_page.text
+    assert 'data-output-ref="answer"' in workspace_reentry_page.text
+    assert 'continue-with-selected-result' in workspace_reentry_page.text
+    assert 'reopen-selected-result' in workspace_reentry_page.text
+    assert 'Selected result: run-002' in workspace_reentry_page.text
 
 
 def test_fastapi_binding_workspace_result_history_renders_type_aware_result_shapes() -> None:

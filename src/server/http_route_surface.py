@@ -2515,6 +2515,7 @@ class RunHttpRouteSurface:
             provider_probe_rows=provider_probe_rows,
             feedback_rows=feedback_rows,
             app_language_override=_request_app_language(http_request.query_params),
+            return_use_reentry_request=http_request.query_params,
         )
         payload["identity_policy"] = _workspace_shell_identity_policy_body()
         payload["namespace_policy"] = _workspace_shell_namespace_policy_body()
@@ -2638,6 +2639,7 @@ class RunHttpRouteSurface:
             provider_probe_rows=provider_probe_rows,
             feedback_rows=feedback_rows,
             app_language_override=_request_app_language(http_request.query_params),
+            return_use_reentry_request=http_request.query_params,
         )
         payload["identity_policy"] = _workspace_shell_identity_policy_body()
         payload["namespace_policy"] = _workspace_shell_namespace_policy_body()
@@ -2887,7 +2889,7 @@ class RunHttpRouteSurface:
             return _route_response(409, {"status": "rejected", "error_family": "workspace_shell_write_failure", "reason_code": "workspace_shell.commit_blocked", "message": str(exc), "workspace_id": workspace_context.workspace_id})
         serialized = serialize_commit_snapshot(snapshot)
         persisted_source = workspace_artifact_source_writer(workspace_id, serialized) if workspace_artifact_source_writer is not None else serialized
-        payload = build_workspace_shell_runtime_payload(workspace_row=workspace_row, artifact_source=persisted_source, recent_run_rows=recent_run_rows, result_rows_by_run_id=result_rows_by_run_id, onboarding_rows=onboarding_rows, artifact_rows_lookup=artifact_rows_lookup, trace_rows_lookup=trace_rows_lookup, share_payload_rows=tuple(share_payload_rows_provider() or ()) if share_payload_rows_provider is not None else (), provider_binding_rows=provider_binding_rows, managed_secret_rows=managed_secret_rows, provider_probe_rows=provider_probe_rows, feedback_rows=feedback_rows, app_language_override=_request_app_language(http_request.query_params))
+        payload = build_workspace_shell_runtime_payload(workspace_row=workspace_row, artifact_source=persisted_source, recent_run_rows=recent_run_rows, result_rows_by_run_id=result_rows_by_run_id, onboarding_rows=onboarding_rows, artifact_rows_lookup=artifact_rows_lookup, trace_rows_lookup=trace_rows_lookup, share_payload_rows=tuple(share_payload_rows_provider() or ()) if share_payload_rows_provider is not None else (), provider_binding_rows=provider_binding_rows, managed_secret_rows=managed_secret_rows, provider_probe_rows=provider_probe_rows, feedback_rows=feedback_rows, app_language_override=_request_app_language(http_request.query_params), return_use_reentry_request=http_request.query_params)
         payload["transition"] = {"action": "commit_workspace_shell", "from_role": "working_save", "to_role": "commit_snapshot", "workspace_id": workspace_context.workspace_id, "commit_id": snapshot.meta.commit_id, "source_working_save_id": snapshot.meta.source_working_save_id}
         payload["identity_policy"] = _workspace_shell_identity_policy_body()
         payload["namespace_policy"] = _workspace_shell_namespace_policy_body()
@@ -2959,7 +2961,7 @@ class RunHttpRouteSurface:
             working_save = model
         serialized = serialize_working_save(working_save)
         persisted_source = workspace_artifact_source_writer(workspace_id, serialized) if workspace_artifact_source_writer is not None else serialized
-        payload = build_workspace_shell_runtime_payload(workspace_row=workspace_row, artifact_source=persisted_source, recent_run_rows=recent_run_rows, result_rows_by_run_id=result_rows_by_run_id, onboarding_rows=onboarding_rows, artifact_rows_lookup=artifact_rows_lookup, trace_rows_lookup=trace_rows_lookup, share_payload_rows=tuple(share_payload_rows_provider() or ()) if share_payload_rows_provider is not None else (), provider_binding_rows=provider_binding_rows, managed_secret_rows=managed_secret_rows, provider_probe_rows=provider_probe_rows, feedback_rows=feedback_rows, app_language_override=_request_app_language(http_request.query_params))
+        payload = build_workspace_shell_runtime_payload(workspace_row=workspace_row, artifact_source=persisted_source, recent_run_rows=recent_run_rows, result_rows_by_run_id=result_rows_by_run_id, onboarding_rows=onboarding_rows, artifact_rows_lookup=artifact_rows_lookup, trace_rows_lookup=trace_rows_lookup, share_payload_rows=tuple(share_payload_rows_provider() or ()) if share_payload_rows_provider is not None else (), provider_binding_rows=provider_binding_rows, managed_secret_rows=managed_secret_rows, provider_probe_rows=provider_probe_rows, feedback_rows=feedback_rows, app_language_override=_request_app_language(http_request.query_params), return_use_reentry_request=http_request.query_params)
         payload["transition"] = {"action": "checkout_workspace_shell", "from_role": "commit_snapshot", "to_role": "working_save", "workspace_id": workspace_context.workspace_id, "commit_id": commit_id, "working_save_id": working_save.meta.working_save_id, "source_share_id": source_share_id}
         payload["identity_policy"] = _workspace_shell_identity_policy_body()
         payload["namespace_policy"] = _workspace_shell_namespace_policy_body()
