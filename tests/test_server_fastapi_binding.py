@@ -3733,6 +3733,13 @@ def test_fastapi_web_skeleton_upload_submit_result_entry_pages() -> None:
     assert "scanning" in upload.text
     assert "rejected" in upload.text
     assert "safe" in upload.text
+    assert "upload-status-panel" in upload.text
+    assert "data-presign-path=\"/api/workspaces/ws-001/uploads/presign\"" in upload.text
+    assert "data-confirm-template=\"/api/workspaces/ws-001/uploads/{upload_id}/confirm\"" in upload.text
+    assert "data-status-template=\"/api/workspaces/ws-001/uploads/{upload_id}\"" in upload.text
+    assert "upload-run-gate" in upload.text
+    assert "data-requires-upload-status=\"safe\"" in upload.text
+    assert "Run remains gated until the upload status is safe." in upload.text
 
     run = client.get("/app/workspaces/ws-001/run", headers=_session_headers())
     assert run.status_code == 200

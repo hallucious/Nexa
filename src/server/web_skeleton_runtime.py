@@ -121,10 +121,28 @@ def render_web_upload_entry_html(
         <li>{escape(ui_text("web.upload.step.confirm", app_language=app_language, fallback_text="Confirm uploaded bytes."))} <code>POST /api/workspaces/{escape(workspace_id)}/uploads/{{upload_id}}/confirm</code></li>
         <li>{escape(ui_text("web.upload.step.status", app_language=app_language, fallback_text="Check status: uploading, scanning, quarantine, rejected, or safe."))}</li>
       </ol>
+      <section
+        id="upload-status-panel"
+        class="card"
+        aria-label="Upload status panel"
+        data-presign-path="/api/workspaces/{escape(workspace_id)}/uploads/presign"
+        data-confirm-template="/api/workspaces/{escape(workspace_id)}/uploads/{{upload_id}}/confirm"
+        data-status-template="/api/workspaces/{escape(workspace_id)}/uploads/{{upload_id}}"
+      >
+        <h2>{escape(ui_text("web.upload.status.title", app_language=app_language, fallback_text="Upload safety gate"))}</h2>
+        <p id="upload-gate-summary">{escape(ui_text("web.upload.gate.summary", app_language=app_language, fallback_text="Run remains gated until the upload status is safe."))}</p>
+        <ul>
+          <li><code>filename</code>, <code>declared_mime_type</code>, and <code>declared_size_bytes</code> are sent to presign.</li>
+          <li><code>observed_size_bytes</code>, <code>observed_mime_type</code>, and scan state are sent to confirm.</li>
+          <li>The run entry remains gated while status is uploading, scanning, quarantine, or rejected.</li>
+        </ul>
+        <pre id="upload-status-output" aria-live="polite">{escape(ui_text("web.upload.status.pending", app_language=app_language, fallback_text="No upload status yet."))}</pre>
+      </section>
       <div class="actions">
         <a class="button" href="/app/workspaces/{escape(workspace_id)}?app_language={escape(app_language)}">Back to workspace</a>
-        <a class="button secondary" href="/app/workspaces/{escape(workspace_id)}/run?app_language={escape(app_language)}">Continue to run</a>
+        <a id="upload-run-gate" class="button secondary" aria-disabled="true" data-requires-upload-status="safe" href="/app/workspaces/{escape(workspace_id)}/run?app_language={escape(app_language)}">Continue to run</a>
       </div>
+
     </section>
 """
     return _html_page(title=title, app_language=app_language, body=body)
