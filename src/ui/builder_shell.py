@@ -177,6 +177,20 @@ class FirstSuccessStepView:
 
 
 @dataclass(frozen=True)
+class FirstSuccessResultView:
+    visible: bool = False
+    state: str = "hidden"
+    summary: str | None = None
+    primary_text: str | None = None
+    output_ref: str | None = None
+    artifact_ref: str | None = None
+    next_action_id: str | None = None
+    next_action_label: str | None = None
+    preferred_panel_id: str | None = None
+    read_complete: bool = False
+
+
+@dataclass(frozen=True)
 class FirstSuccessDesignerProposalView:
     visible: bool = False
     proposal_state: str = "hidden"
@@ -203,6 +217,7 @@ class FirstSuccessFlowView:
     preferred_panel_id: str | None = None
     advanced_surfaces_unlocked: bool = True
     unlock_condition: str | None = None
+    result_reading: FirstSuccessResultView = field(default_factory=FirstSuccessResultView)
     designer_proposal: FirstSuccessDesignerProposalView = field(default_factory=FirstSuccessDesignerProposalView)
     steps: tuple[FirstSuccessStepView, ...] = ()
 
@@ -908,8 +923,10 @@ def _product_readiness_review(*, source, execution_record: ExecutionRecordModel 
         run_blockers = 1
         run_pending = 0
         run_summary = validation_vm.beginner_summary.cause or contextual_help.summary or ui_text("shell.product_readiness.summary.fix_before_run", app_language=app_language, fallback_text="Fix the blocking issue before the first run can continue.")
-        run_action_id = "open_node_configuration"
-        run_action_label = ui_text("builder.action.open_node_configuration", app_language=app_language, fallback_text="Open step settings")
+        run_action_id, run_action_label = _validation_beginner_action(validation_vm, app_language=app_language)
+        if run_action_id is None:
+            run_action_id = "open_node_configuration"
+            run_action_label = ui_text("builder.action.open_node_configuration", app_language=app_language, fallback_text="Open step settings")
     elif execution_vm is not None and execution_vm.waiting_feedback.visible:
         run_state = "run_in_progress"
         run_blockers = 1
@@ -1125,6 +1142,51 @@ def _step_state(step_id: str, *, current_step_id: str | None, blocked_step_id: s
     return "pending"
 
 
+def _first_success_result_reading_view(
+    execution_vm: ExecutionPanelViewModel | None,
+    *,
+    first_success: bool,
+    app_language: str,
+) -> FirstSuccessResultView:
+    if execution_vm is None or not execution_vm.result_reading.visible:
+        if first_success:
+            return FirstSuccessResultView(
+                visible=True,
+                state="complete",
+                summary=ui_text(
+                    "shell.first_success_flow.result.complete",
+                    app_language=app_language,
+                    fallback_text="The first result has already been read. Advanced surfaces are available.",
+                ),
+                next_action_id="open_result_history",
+                next_action_label=ui_text("builder.action.open_result_history", app_language=app_language, fallback_text="Open recent results"),
+                preferred_panel_id="result_history",
+                read_complete=True,
+            )
+        return FirstSuccessResultView()
+
+    result = execution_vm.result_reading
+    ready = result.state == "ready"
+    partial = result.state == "partial"
+    view_state = "ready_to_read" if ready else ("partial" if partial else result.state or "available")
+    return FirstSuccessResultView(
+        visible=True,
+        state=("complete" if first_success and ready else view_state),
+        summary=result.summary,
+        primary_text=result.primary_text,
+        output_ref=result.output_ref,
+        artifact_ref=result.artifact_ref,
+        next_action_id=("open_result_history" if first_success and ready else "open_runtime_monitoring"),
+        next_action_label=(
+            ui_text("builder.action.open_result_history", app_language=app_language, fallback_text="Open recent results")
+            if first_success and ready
+            else ui_text("builder.action.open_runtime_monitoring", app_language=app_language, fallback_text="Read result")
+        ),
+        preferred_panel_id=("result_history" if first_success and ready else "execution"),
+        read_complete=bool(first_success and ready),
+    )
+
+
 def _designer_first_success_proposal_view(
     designer_vm: DesignerPanelViewModel | None,
     *,
@@ -1277,6 +1339,11 @@ def _first_success_flow_review(
     preferred_panel_id: str | None = None
     flow_state = "in_progress"
     designer_proposal = _designer_first_success_proposal_view(designer_vm, app_language=app_language)
+    result_reading = _first_success_result_reading_view(
+        execution_vm,
+        first_success=first_success,
+        app_language=app_language,
+    )
 
     if first_success:
         completed_steps = {"describe_goal", "review_workflow", "run_workflow", "read_result"}
@@ -1433,6 +1500,7 @@ def _first_success_flow_review(
         preferred_panel_id=preferred_panel_id,
         advanced_surfaces_unlocked=advanced_unlocked,
         unlock_condition="already_unlocked" if advanced_unlocked else "first_success_or_explicit_advanced_request",
+        result_reading=result_reading,
         designer_proposal=designer_proposal,
         steps=steps,
     )
@@ -1880,6 +1948,7 @@ __all__ = [
     "FirstSuccessPreflightBlockerView",
     "FirstSuccessPreflightView",
     "FirstSuccessStepView",
+    "FirstSuccessResultView",
     "FirstSuccessDesignerProposalView",
     "FirstSuccessFlowView",
     "ProductReadinessReviewView",
