@@ -159,6 +159,7 @@ def build_workspace_result_history_payload(
                 "feedback_href": f"/app/workspaces/{response.workspace_id}/feedback?surface=result_history&run_id={item.run_id}&app_language={app_language}",
                 "output_key": item.output_key,
                 "first_artifact_ref": first_artifact_ref_by_run_id.get(item.run_id),
+                "return_use_context": item.return_use_context,
                 "first_success_completion": {
                     "action_id": "mark_first_result_read",
                     "action_kind": "first_success_completion",
@@ -269,6 +270,7 @@ def render_workspace_result_history_html(payload: Mapping[str, Any]) -> str:
         </article>
         """
     selected_output_html = ""
+    return_use_reentry_html = ""
     if selected.get("output_preview"):
         render_kind = escape(str(selected.get("result_render_kind") or "plain_text"))
         render_label = escape(str(selected.get("result_render_label") or ui_text("server.result_history.result_render_kind", app_language=app_language, fallback_text="Result format")))
@@ -297,6 +299,21 @@ def render_workspace_result_history_html(payload: Mapping[str, Any]) -> str:
             f'<button id="copy-selected-result" type="button" data-copy-output="{copy_output}">{escape(ui_text("server.result_history.copy_result", app_language=app_language, fallback_text="Copy result"))}</button>'
             f'<a id="continue-from-selected-result" class="action-link" href="{continue_href}">{escape(ui_text("server.result_history.continue_from_result", app_language=app_language, fallback_text="Continue from this result"))}</a>'
             f'<a id="report-selected-result-issue" class="action-link secondary" href="{feedback_href}">{escape(ui_text("server.result_history.report_result_issue", app_language=app_language, fallback_text="Report result issue"))}</a>'
+            '</div>'
+            '</section>'
+        )
+        return_use_context = dict(selected.get("return_use_context") or {})
+        return_use_source = escape(str(return_use_context.get("source") or "result_history"))
+        return_use_summary = escape(str(return_use_context.get("summary") or ui_text("server.result_history.return_use_summary", app_language=app_language, fallback_text="Continue from this selected result without losing return-use context.")))
+        return_use_href = escape(str(return_use_context.get("action_href") or continue_href))
+        return_use_reentry_html = (
+            '<section id="return-use-reentry-panel" class="selected-output" role="region" aria-labelledby="return-use-reentry-title" '
+            f'data-return-use-source="{return_use_source}" data-return-use-run-id="{escape(str(selected.get("run_id") or ""))}" '
+            f'data-output-ref="{output_key}">'
+            f'<h2 id="return-use-reentry-title">{escape(ui_text("server.result_history.return_use_title", app_language=app_language, fallback_text="Continue from this result"))}</h2>'
+            f'<p>{return_use_summary}</p>'
+            '<div class="actions">'
+            f'<a id="return-use-selected-result" class="action-link" href="{return_use_href}">{escape(ui_text("server.result_history.return_use_continue", app_language=app_language, fallback_text="Continue with this result"))}</a>'
             '</div>'
             '</section>'
         )
@@ -365,6 +382,7 @@ def render_workspace_result_history_html(payload: Mapping[str, Any]) -> str:
       </header>
       {onboarding_html}
       {selected_output_html}
+      {return_use_reentry_html}
       {first_success_completion_html}
       <section class="result-grid" aria-label="{escape(ui_text('server.result_history.recent_history_aria', app_language=app_language, fallback_text='Recent result history'))}">{cards_html}</section>
     </main>

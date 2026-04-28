@@ -1890,6 +1890,15 @@ def test_fastapi_binding_workspace_result_history_routes_round_trip() -> None:
     assert 'data-copy-output="Latest Hello"' in page_response.text
     assert 'continue-from-selected-result' in page_response.text
     assert 'report-selected-result-issue' in page_response.text
+    assert api_payload['selected_result']['return_use_context']['source'] == 'result_history'
+    assert api_payload['selected_result']['return_use_context']['run_id'] == 'run-002'
+    assert api_payload['selected_result']['return_use_context']['output_ref'] == 'answer'
+    assert api_payload['selected_result']['continue_href'] == '/app/workspaces/ws-001?app_language=en&return_use=selected_result&run_id=run-002'
+    assert 'return-use-reentry-panel' in page_response.text
+    assert 'data-return-use-source="result_history"' in page_response.text
+    assert 'data-return-use-run-id="run-002"' in page_response.text
+    assert 'return-use-selected-result' in page_response.text
+    assert '/app/workspaces/ws-001?app_language=en&amp;return_use=selected_result&amp;run_id=run-002' in page_response.text
 
 
 def test_fastapi_binding_workspace_result_history_renders_type_aware_result_shapes() -> None:

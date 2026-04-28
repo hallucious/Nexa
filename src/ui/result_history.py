@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Mapping, Sequence
+from urllib.parse import quote
 
 from src.ui.i18n import ui_text
 
@@ -28,6 +29,7 @@ class ResultHistoryItemView:
     copy_output_text: str | None = None
     copy_action_label: str | None = None
     reuse_action_label: str | None = None
+    return_use_context: dict[str, object] | None = None
     open_result_href: str | None = None
     continue_href: str | None = None
     summary_lines: list[str] = field(default_factory=list)
@@ -347,7 +349,22 @@ def _result_history_item(item: object, result: object | None, *, app_language: s
     workspace_id = str(_field(item, "workspace_id") or "")
     run_id = str(_field(item, "run_id") or "")
     open_result_href = f"/app/workspaces/{workspace_id}/results?run_id={run_id}"
-    continue_href = f"/app/workspaces/{workspace_id}"
+    continue_href = (
+        f"/app/workspaces/{workspace_id}?app_language={quote(str(app_language), safe='')}"
+        f"&return_use=selected_result&run_id={quote(run_id, safe='')}"
+    )
+    return_use_context = {
+        "source": "result_history",
+        "source_label": ui_text("result_history.return_use.source_label", app_language=app_language, fallback_text="Recent result"),
+        "run_id": run_id,
+        "output_ref": output_key,
+        "action_href": continue_href,
+        "summary": ui_text(
+            "result_history.return_use.summary",
+            app_language=app_language,
+            fallback_text="Continue this workflow with the selected result preserved as your return-use context.",
+        ),
+    }
     summary_lines = [_run_timestamp_label(item, result, app_language=app_language), _result_summary_text(item, result, app_language=app_language)]
     if output_preview:
         summary_lines.append(ui_text("result_history.summary.output_preview", app_language=app_language, fallback_text=f"Latest output preview: {output_preview}", output_preview=output_preview))
@@ -371,6 +388,7 @@ def _result_history_item(item: object, result: object | None, *, app_language: s
         copy_output_text=copy_output_text,
         copy_action_label=ui_text("result_history.action.copy_output", app_language=app_language, fallback_text="Copy result"),
         reuse_action_label=ui_text("result_history.action.continue_from_result", app_language=app_language, fallback_text="Continue from this result"),
+        return_use_context=return_use_context,
         open_result_href=open_result_href,
         continue_href=continue_href,
         summary_lines=summary_lines,
