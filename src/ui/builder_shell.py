@@ -165,6 +165,34 @@ class FirstSuccessPreflightView:
 
 
 @dataclass(frozen=True)
+class FirstSuccessStepView:
+    step_id: str
+    label: str | None = None
+    state: str = "pending"
+    summary: str | None = None
+    recommended_action_id: str | None = None
+    recommended_action_label: str | None = None
+    preferred_workspace_id: str | None = None
+    preferred_panel_id: str | None = None
+
+
+@dataclass(frozen=True)
+class FirstSuccessFlowView:
+    visible: bool = False
+    flow_state: str = "hidden"
+    current_step_id: str | None = None
+    current_step_label: str | None = None
+    summary: str | None = None
+    next_action_id: str | None = None
+    next_action_label: str | None = None
+    preferred_workspace_id: str | None = None
+    preferred_panel_id: str | None = None
+    advanced_surfaces_unlocked: bool = True
+    unlock_condition: str | None = None
+    steps: tuple[FirstSuccessStepView, ...] = ()
+
+
+@dataclass(frozen=True)
 class ProductReadinessReviewView:
     review_state: str = "hold_first_success_setup"
     review_label: str | None = None
@@ -209,6 +237,7 @@ class BuilderShellViewModel:
     workspace_chain: WorkspaceChainReviewView = field(default_factory=WorkspaceChainReviewView)
     product_readiness: ProductReadinessReviewView = field(default_factory=ProductReadinessReviewView)
     first_success_preflight: FirstSuccessPreflightView = field(default_factory=FirstSuccessPreflightView)
+    first_success_flow: FirstSuccessFlowView = field(default_factory=FirstSuccessFlowView)
     layout: BuilderShellLayoutView = field(default_factory=BuilderShellLayoutView)
     diagnostics: BuilderShellDiagnosticsView = field(default_factory=BuilderShellDiagnosticsView)
     beginner_onboarding: BeginnerOnboardingHintView = field(default_factory=BeginnerOnboardingHintView)
@@ -1026,6 +1055,239 @@ def _product_readiness_review(*, source, execution_record: ExecutionRecordModel 
     )
 
 
+
+def _first_success_step(
+    *,
+    step_id: str,
+    label_key: str,
+    fallback_label: str,
+    state: str,
+    summary: str | None,
+    recommended_action_id: str | None,
+    recommended_action_label: str | None,
+    preferred_workspace_id: str | None,
+    preferred_panel_id: str | None,
+    app_language: str,
+) -> FirstSuccessStepView:
+    return FirstSuccessStepView(
+        step_id=step_id,
+        label=ui_text(label_key, app_language=app_language, fallback_text=fallback_label),
+        state=state,
+        summary=summary,
+        recommended_action_id=recommended_action_id,
+        recommended_action_label=recommended_action_label,
+        preferred_workspace_id=preferred_workspace_id,
+        preferred_panel_id=preferred_panel_id,
+    )
+
+
+def _validation_beginner_action(validation_vm: ValidationPanelViewModel | None, *, app_language: str) -> tuple[str | None, str | None]:
+    if validation_vm is None:
+        return None, None
+    summary = validation_vm.beginner_summary
+    if summary.next_action_type:
+        if summary.next_action_type in {"focus_top_issue", "request_revision"}:
+            action_id = "open_node_configuration"
+        elif summary.next_action_type == "proceed_to_approval":
+            action_id = "review_current"
+        else:
+            action_id = summary.next_action_type
+        return action_id, summary.next_action_label
+    return "open_node_configuration", ui_text(
+        "builder.action.open_node_configuration",
+        app_language=app_language,
+        fallback_text="Open step settings",
+    )
+
+
+def _step_state(step_id: str, *, current_step_id: str | None, blocked_step_id: str | None, completed_steps: set[str]) -> str:
+    if step_id in completed_steps:
+        return "complete"
+    if step_id == blocked_step_id:
+        return "blocked"
+    if step_id == current_step_id:
+        return "current"
+    return "pending"
+
+
+def _first_success_flow_review(
+    *,
+    source,
+    execution_record: ExecutionRecordModel | None,
+    beginner_mode: bool,
+    empty_workspace_mode: bool,
+    advanced_unlocked: bool,
+    designer_vm: DesignerPanelViewModel | None,
+    validation_vm: ValidationPanelViewModel | None,
+    execution_vm: ExecutionPanelViewModel | None,
+    first_success_preflight: FirstSuccessPreflightView,
+    product_readiness: ProductReadinessReviewView,
+    app_language: str,
+) -> FirstSuccessFlowView:
+    first_success = _first_success_achieved(
+        source=source,
+        execution_record=execution_record,
+        execution_vm=execution_vm,
+    )
+    should_show = bool(first_success or beginner_mode or product_readiness.review_state.startswith("hold_first_success"))
+    if not should_show:
+        return FirstSuccessFlowView(advanced_surfaces_unlocked=advanced_unlocked, unlock_condition="already_unlocked")
+
+    completed_steps: set[str] = set()
+    blocked_step_id: str | None = None
+    current_step_id: str | None = None
+    summary: str | None = None
+    next_action_id: str | None = None
+    next_action_label: str | None = None
+    preferred_workspace_id: str | None = None
+    preferred_panel_id: str | None = None
+    flow_state = "in_progress"
+
+    if first_success:
+        completed_steps = {"describe_goal", "review_workflow", "run_workflow", "read_result"}
+        flow_state = "complete"
+        summary = ui_text(
+            "shell.first_success_flow.summary.complete",
+            app_language=app_language,
+            fallback_text="The first workflow has already reached a readable result. Advanced surfaces can now be opened.",
+        )
+        next_action_id = "open_result_history"
+        next_action_label = ui_text("builder.action.open_result_history", app_language=app_language, fallback_text="Open recent results")
+        preferred_workspace_id = "runtime_monitoring"
+        preferred_panel_id = "result_history"
+    elif empty_workspace_mode:
+        current_step_id = "describe_goal"
+        summary = (
+            designer_vm.request_state.input_placeholder
+            if designer_vm is not None and designer_vm.request_state.input_placeholder
+            else ui_text(
+                "shell.first_success_flow.summary.describe_goal",
+                app_language=app_language,
+                fallback_text="Describe what you want to build. Nexa will show a preview before anything is committed.",
+            )
+        )
+        next_action_id = "open_designer"
+        next_action_label = ui_text("beginner.onboarding.start.action", app_language=app_language, fallback_text="Open Designer")
+        preferred_workspace_id = "node_configuration"
+        preferred_panel_id = "designer"
+    elif first_success_preflight.visible and not first_success_preflight.ready:
+        blocked_step_id = "run_workflow"
+        current_step_id = "run_workflow"
+        summary = first_success_preflight.cause or ui_text(
+            "shell.first_success_flow.summary.preflight_blocked",
+            app_language=app_language,
+            fallback_text="Resolve the provider or file blocker before running.",
+        )
+        next_action_id, next_action_label = _first_success_preflight_action(first_success_preflight, app_language=app_language)
+        preferred_workspace_id = "node_configuration"
+        preferred_panel_id = "designer" if next_action_id in {"open_provider_setup", "open_file_input"} else "validation"
+        completed_steps = {"describe_goal", "review_workflow"}
+        flow_state = "blocked"
+    elif validation_vm is not None and validation_vm.overall_status == "blocked":
+        blocked_step_id = "review_workflow"
+        current_step_id = "review_workflow"
+        summary = validation_vm.beginner_summary.cause or ui_text(
+            "shell.first_success_flow.summary.validation_blocked",
+            app_language=app_language,
+            fallback_text="Fix the blocking workflow issue before running.",
+        )
+        next_action_id, next_action_label = _validation_beginner_action(validation_vm, app_language=app_language)
+        preferred_workspace_id = "node_configuration"
+        preferred_panel_id = "validation"
+        completed_steps = {"describe_goal"}
+        flow_state = "blocked"
+    elif execution_vm is not None and execution_vm.waiting_feedback.visible:
+        current_step_id = "run_workflow"
+        summary = execution_vm.waiting_feedback.summary or ui_text(
+            "shell.first_success_flow.summary.run_in_progress",
+            app_language=app_language,
+            fallback_text="The run is in progress. Keep the run monitor open until a result is ready.",
+        )
+        next_action_id = "open_runtime_monitoring"
+        next_action_label = ui_text("builder.action.open_runtime_monitoring", app_language=app_language, fallback_text="Open run monitor")
+        preferred_workspace_id = "runtime_monitoring"
+        preferred_panel_id = "execution"
+        completed_steps = {"describe_goal", "review_workflow"}
+        flow_state = "running"
+    elif execution_vm is not None and execution_vm.result_reading.visible and execution_vm.result_reading.state == "ready":
+        current_step_id = "read_result"
+        summary = execution_vm.result_reading.summary or ui_text(
+            "shell.first_success_flow.summary.read_result",
+            app_language=app_language,
+            fallback_text="A result is ready. Read it before unlocking deeper inspection surfaces.",
+        )
+        next_action_id = "open_runtime_monitoring"
+        next_action_label = ui_text("builder.action.open_runtime_monitoring", app_language=app_language, fallback_text="Read result")
+        preferred_workspace_id = "runtime_monitoring"
+        preferred_panel_id = "execution"
+        completed_steps = {"describe_goal", "review_workflow", "run_workflow"}
+    elif _run_action_enabled(execution_vm):
+        current_step_id = "run_workflow"
+        summary = ui_text(
+            "shell.first_success_flow.summary.ready_to_run",
+            app_language=app_language,
+            fallback_text="The workflow is ready enough to run. Launch it, then read the result.",
+        )
+        next_action_id = "run_current"
+        next_action_label = ui_text("builder.action.run_current", app_language=app_language, fallback_text="Run current")
+        preferred_workspace_id = "runtime_monitoring"
+        preferred_panel_id = "execution"
+        completed_steps = {"describe_goal", "review_workflow"}
+    else:
+        current_step_id = "review_workflow"
+        summary = (
+            validation_vm.beginner_summary.cause
+            if validation_vm is not None and validation_vm.beginner_summary.cause
+            else ui_text(
+                "shell.first_success_flow.summary.review_workflow",
+                app_language=app_language,
+                fallback_text="Review the workflow preview and fix any simple validation issue before running.",
+            )
+        )
+        next_action_id = "open_node_configuration"
+        next_action_label = ui_text("builder.action.open_node_configuration", app_language=app_language, fallback_text="Open step settings")
+        preferred_workspace_id = "node_configuration"
+        preferred_panel_id = "validation"
+        completed_steps = {"describe_goal"}
+
+    step_defs = (
+        ("describe_goal", "shell.first_success_flow.step.describe_goal", "Describe goal"),
+        ("review_workflow", "shell.first_success_flow.step.review_workflow", "Review workflow"),
+        ("run_workflow", "shell.first_success_flow.step.run_workflow", "Run workflow"),
+        ("read_result", "shell.first_success_flow.step.read_result", "Read result"),
+    )
+    steps = tuple(
+        _first_success_step(
+            step_id=step_id,
+            label_key=label_key,
+            fallback_label=fallback_label,
+            state=_step_state(step_id, current_step_id=current_step_id, blocked_step_id=blocked_step_id, completed_steps=completed_steps),
+            summary=summary if step_id == current_step_id or step_id == blocked_step_id else None,
+            recommended_action_id=next_action_id if step_id == current_step_id or step_id == blocked_step_id else None,
+            recommended_action_label=next_action_label if step_id == current_step_id or step_id == blocked_step_id else None,
+            preferred_workspace_id=preferred_workspace_id if step_id == current_step_id or step_id == blocked_step_id else None,
+            preferred_panel_id=preferred_panel_id if step_id == current_step_id or step_id == blocked_step_id else None,
+            app_language=app_language,
+        )
+        for step_id, label_key, fallback_label in step_defs
+    )
+    current_step = next((step for step in steps if step.step_id == current_step_id), None)
+    return FirstSuccessFlowView(
+        visible=True,
+        flow_state=flow_state,
+        current_step_id=current_step_id,
+        current_step_label=current_step.label if current_step is not None else None,
+        summary=summary,
+        next_action_id=next_action_id,
+        next_action_label=next_action_label,
+        preferred_workspace_id=preferred_workspace_id,
+        preferred_panel_id=preferred_panel_id,
+        advanced_surfaces_unlocked=advanced_unlocked,
+        unlock_condition="already_unlocked" if advanced_unlocked else "first_success_or_explicit_advanced_request",
+        steps=steps,
+    )
+
+
 def _selected_ref_from_validation(validation_report: ValidationReport | None) -> str | None:
     if validation_report is None:
         return None
@@ -1401,6 +1663,19 @@ def read_builder_shell_view_model(
         first_success_preflight=first_success_preflight_vm,
         app_language=app_language,
     )
+    first_success_flow_vm = _first_success_flow_review(
+        source=source_unwrapped if source_unwrapped is not None else execution_record,
+        execution_record=execution_record,
+        beginner_mode=beginner_mode,
+        empty_workspace_mode=empty_workspace_mode,
+        advanced_unlocked=advanced_unlocked,
+        designer_vm=designer_vm,
+        validation_vm=validation_vm,
+        execution_vm=execution_vm,
+        first_success_preflight=first_success_preflight_vm,
+        product_readiness=product_readiness_vm,
+        app_language=app_language,
+    )
 
     return BuilderShellViewModel(
         shell_status=shell_status,
@@ -1432,6 +1707,7 @@ def read_builder_shell_view_model(
         workspace_chain=workspace_chain_vm,
         product_readiness=product_readiness_vm,
         first_success_preflight=first_success_preflight_vm,
+        first_success_flow=first_success_flow_vm,
         layout=layout_vm,
         diagnostics=diagnostics,
         beginner_onboarding=beginner_onboarding,
@@ -1453,6 +1729,8 @@ __all__ = [
     "ProductSurfaceStageView",
     "FirstSuccessPreflightBlockerView",
     "FirstSuccessPreflightView",
+    "FirstSuccessStepView",
+    "FirstSuccessFlowView",
     "ProductReadinessReviewView",
     "BuilderShellViewModel",
     "read_builder_shell_view_model",
