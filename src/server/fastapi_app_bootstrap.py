@@ -4,7 +4,6 @@ from typing import Any, Callable, Mapping
 
 from src.server.fastapi_binding_models import FastApiBindingConfig
 from src.server.fastapi_sentry_binding import capture_fastapi_sentry_exception, install_fastapi_sentry_observability
-from src.server.sentry_observability_runtime import SentryCaptureResult
 
 
 SessionClaimsResolver = Callable[[Any], Mapping[str, Any] | None]
@@ -18,9 +17,9 @@ def install_fastapi_app_observability_bootstrap(
 ) -> None:
     """Install app-level observability state for FastAPI bindings.
 
-    This helper intentionally initializes/stores Sentry runtime posture only. It
-    does not install a competing exception-response middleware; FastApiRouteBindings'
-    edge middleware remains the canonical HTTP exception-response owner.
+    This helper owns app-level observability bootstrap only. It must not own the
+    user-visible exception response contract; FastApiRouteBindings.edge security
+    middleware remains the HTTP 500 response owner.
     """
 
     try:
@@ -41,8 +40,12 @@ def capture_fastapi_app_exception(
     request_id: str | None = None,
     session_claims: Mapping[str, Any] | None = None,
     status_code: int | None = 500,
-) -> SentryCaptureResult | None:
-    """Best-effort Sentry capture from the canonical FastAPI edge exception path."""
+) -> Any:
+    """Capture a FastAPI exception as observability without changing response ownership.
+
+    The helper is best-effort and intentionally swallows all capture failures so
+    Sentry can never become the user-visible failure path.
+    """
 
     try:
         return capture_fastapi_sentry_exception(
@@ -60,7 +63,4 @@ def capture_fastapi_app_exception(
         return None
 
 
-__all__ = [
-    "capture_fastapi_app_exception",
-    "install_fastapi_app_observability_bootstrap",
-]
+__all__ = ["capture_fastapi_app_exception", "install_fastapi_app_observability_bootstrap"]

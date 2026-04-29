@@ -13,6 +13,7 @@ from src.server.aws_secrets_manager_binding import AwsSecretsManagerSecretAuthor
 from src.server.aws_secrets_manager_models import AwsSecretsManagerBindingConfig
 from src.server.framework_binding_models import FrameworkInboundRequest, FrameworkOutboundResponse
 from src.server.fastapi_binding_models import FastApiBindingConfig, FastApiRouteDependencies
+from src.server.fastapi_app_bootstrap import capture_fastapi_app_exception, install_fastapi_app_observability_bootstrap
 from src.server.edge_security_runtime import (
     InMemoryEdgeRateLimiter,
     apply_security_headers,
@@ -28,10 +29,6 @@ from src.server.edge_observability_runtime import (
     edge_request_completed_event,
     emit_edge_observation,
     request_observation_context,
-)
-from src.server.fastapi_app_bootstrap import (
-    capture_fastapi_app_exception,
-    install_fastapi_app_observability_bootstrap,
 )
 from src.server.workspace_shell_runtime import render_workspace_shell_runtime_html
 from src.server.circuit_library_runtime import render_circuit_library_runtime_html
@@ -3377,10 +3374,6 @@ class FastApiRouteBindings:
                 response = await call_next(request)
             except Exception as exc:
                 if self.config.edge_observability_enabled and self.config.edge_exception_capture_enabled:
-                    emit_edge_observation(
-                        self.dependencies.edge_observation_writer,
-                        edge_exception_event(request_context=request_context, exc=exc),
-                    )
                     capture_fastapi_app_exception(
                         app=app,
                         config=self.config,
@@ -3392,6 +3385,10 @@ class FastApiRouteBindings:
                         request_id=request_id,
                         session_claims=session_claims,
                         status_code=500,
+                    )
+                    emit_edge_observation(
+                        self.dependencies.edge_observation_writer,
+                        edge_exception_event(request_context=request_context, exc=exc),
                     )
                     response = JSONResponse(
                         status_code=500,
