@@ -37,7 +37,7 @@ class _FailingCaptureSentrySdk:
         raise RuntimeError("sentry unavailable")
 
 
-def test_sentry_scrubber_removes_request_body_headers_cookies_and_user_pii() -> None:
+def test_sentry_scrubber_removes_request_body_headers_cookies_user_pii_and_exception_messages() -> None:
     event = {
         "request": {
             "url": "https://app.nexa.example/api/runs?api_key=sk-query-secret",
@@ -56,7 +56,7 @@ def test_sentry_scrubber_removes_request_body_headers_cookies_and_user_pii() -> 
             "ip_address": "203.0.113.9",
         },
         "extra": {"provider_token": "sk-extra-secret", "safe_count": 3},
-        "exception": {"values": [{"value": "RuntimeError with sk-runtime-secret"}]},
+        "exception": {"values": [{"value": "RuntimeError with raw confidential document text"}]},
     }
 
     scrubbed = scrub_sentry_event(event)
@@ -72,12 +72,12 @@ def test_sentry_scrubber_removes_request_body_headers_cookies_and_user_pii() -> 
     assert scrubbed["user"]["email"] == REDACTED_VALUE
     assert scrubbed["user"]["ip_address"] == REDACTED_VALUE
     assert scrubbed["extra"]["provider_token"] == REDACTED_VALUE
+    assert scrubbed["exception"]["values"][0]["value"] == REDACTED_VALUE
 
     serialized = json.dumps(scrubbed, sort_keys=True)
     assert "raw confidential document text" not in serialized
     assert "sk-query-secret" not in serialized
     assert "sk-header-secret" not in serialized
-    assert "sk-runtime-secret" not in serialized
     assert "person@example.com" not in serialized
 
 
@@ -145,7 +145,7 @@ def test_sentry_capture_exception_emits_scrubbed_event_without_raw_secret_conten
     result = capture_sentry_exception(
         enabled=True,
         sdk_module=fake_sdk,
-        exc=RuntimeError("provider failed with sk-runtime-secret"),
+        exc=RuntimeError("provider failed on raw confidential contract text"),
         context={
             "run_id": "run-001",
             "worker_token": "sk-worker-secret",
@@ -166,10 +166,10 @@ def test_sentry_capture_exception_emits_scrubbed_event_without_raw_secret_conten
     assert len(fake_sdk.captured_events) == 1
     captured = fake_sdk.captured_events[0]
     captured_text = json.dumps(captured, sort_keys=True)
-    assert "sk-runtime-secret" not in captured_text
+    assert "raw confidential contract text" not in captured_text
     assert "sk-worker-secret" not in captured_text
     assert "sk-header-secret" not in captured_text
-    assert "raw confidential contract text" not in captured_text
+    assert captured["exception"]["values"][0]["value"] == REDACTED_VALUE
     assert captured["extra"]["run_id"] == "run-001"
     assert captured["extra"]["worker_token"] == REDACTED_VALUE
     assert captured["extra"]["request"]["headers"]["authorization"] == REDACTED_VALUE
@@ -229,7 +229,7 @@ def test_initialize_sentry_from_fastapi_config_uses_config_fields() -> None:
 
 def test_build_sentry_exception_event_is_scrubbed_before_sdk_boundary() -> None:
     event = build_sentry_exception_event(
-        exc=RuntimeError("exception message contains sk-runtime-secret"),
+        exc=RuntimeError("exception message contains raw confidential contract text"),
         context={
             "workspace_id": "ws-001",
             "api_key": "sk-context-secret",
@@ -243,11 +243,12 @@ def test_build_sentry_exception_event_is_scrubbed_before_sdk_boundary() -> None:
 
     assert event is not None
     event_text = json.dumps(event, sort_keys=True)
-    assert "sk-runtime-secret" not in event_text
+    assert "raw confidential contract text" not in event_text
     assert "sk-context-secret" not in event_text
     assert "sk-query-secret" not in event_text
     assert "sk-header-secret" not in event_text
     assert "raw confidential user content" not in event_text
+    assert event["exception"]["values"][0]["value"] == REDACTED_VALUE
     assert event["extra"]["workspace_id"] == "ws-001"
     assert event["extra"]["api_key"] == REDACTED_VALUE
     assert event["extra"]["request"]["headers"]["authorization"] == REDACTED_VALUE

@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from typing import Any, Mapping
 
 from src.server.edge_observability_runtime import REDACTED_VALUE, redact_headers, redact_mapping
+from src.server.observability_payload_guard import sanitize_observability_payload
 
 
 OTEL_DISABLED_REASON = "otel_disabled"
@@ -109,7 +110,8 @@ def build_otel_safe_attributes(attributes: Mapping[str, Any] | None) -> dict[str
     for key, value in attributes.items():
         key_text = str(key)
         safe[key_text] = _safe_attribute_value(key_text, value)
-    return safe
+    sanitized = sanitize_observability_payload(safe)
+    return dict(sanitized) if isinstance(sanitized, Mapping) else {}
 
 
 def build_otel_http_server_attributes(
@@ -173,7 +175,10 @@ def build_otel_exception_event(*, exc: BaseException, attributes: Mapping[str, A
 
     event_attributes = {
         "exception.type": exc.__class__.__name__,
-        "exception.message": _redact_attribute_scalar(str(exc)),
+        # Exception messages commonly contain raw input, SQL fragments, provider
+        # output, or document excerpts. O3 treats the message as unsafe by
+        # default rather than attempting content inference.
+        "exception.message": REDACTED_VALUE,
     }
     if isinstance(attributes, Mapping):
         event_attributes.update(build_otel_safe_attributes(attributes))

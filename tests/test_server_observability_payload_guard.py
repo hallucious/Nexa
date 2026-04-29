@@ -47,14 +47,60 @@ def test_sanitize_observability_payload_removes_bodies_documents_prompts_outputs
     assert sanitized["nested"][0]["safe_count"] == 3
 
 
+def test_sanitize_observability_payload_removes_context_path_and_contract_result_content() -> None:
+    payload = {
+        "working_context": {
+            "input": {"text": "raw uploaded contract body"},
+            "prompt": {"main": {"rendered": "prompt rendered with contract terms"}},
+            "provider": {"openai": {"output": "provider answer with clause text"}},
+        },
+        "contract_review_result": {
+            "clauses": [
+                {
+                    "clause_id": "c_001",
+                    "text": "raw clause text",
+                    "plain_text": "plain explanation of raw clause",
+                    "why_it_matters": "why raw clause matters",
+                }
+            ],
+            "pre_signature_questions": [
+                {"question": "raw question about the contract"}
+            ],
+        },
+        "safe_count": 3,
+    }
+
+    sanitized = sanitize_observability_payload(payload)
+    serialized = json.dumps(sanitized, sort_keys=True)
+
+    assert "raw uploaded contract body" not in serialized
+    assert "prompt rendered with contract terms" not in serialized
+    assert "provider answer with clause text" not in serialized
+    assert "raw clause text" not in serialized
+    assert "plain explanation" not in serialized
+    assert "why raw clause matters" not in serialized
+    assert "raw question about the contract" not in serialized
+    assert sanitized["working_context"]["input"]["text"] == REDACTED_VALUE
+    assert sanitized["working_context"]["prompt"]["main"]["rendered"] == REDACTED_VALUE
+    assert sanitized["working_context"]["provider"]["openai"]["output"] == REDACTED_VALUE
+    assert sanitized["contract_review_result"]["clauses"][0]["text"] == REDACTED_VALUE
+    assert sanitized["contract_review_result"]["clauses"][0]["plain_text"] == REDACTED_VALUE
+    assert sanitized["contract_review_result"]["clauses"][0]["why_it_matters"] == REDACTED_VALUE
+    assert sanitized["contract_review_result"]["pre_signature_questions"][0]["question"] == REDACTED_VALUE
+    assert sanitized["safe_count"] == 3
+
+
 def test_assert_observability_payload_safe_rejects_raw_forbidden_fields_and_markers() -> None:
     with pytest.raises(ObservabilityPayloadLeakError, match="unsafe observability field"):
         assert_observability_payload_safe({"request_body": "raw confidential body"})
 
+    with pytest.raises(ObservabilityPayloadLeakError, match="unsafe observability field"):
+        assert_observability_payload_safe({"input": {"text": "raw confidential body"}})
+
     with pytest.raises(ObservabilityPayloadLeakError, match="unsafe observability marker"):
         assert_observability_payload_safe({"safe": "raw confidential body"}, forbidden_markers=["raw confidential body"])
 
-    assert_observability_payload_safe({"request_body": REDACTED_VALUE, "safe": "value"})
+    assert_observability_payload_safe({"request_body": REDACTED_VALUE, "input": {"text": REDACTED_VALUE}, "safe": "value"})
 
 
 def test_emit_edge_observation_sanitizes_payload_before_writer_boundary() -> None:
@@ -71,6 +117,7 @@ def test_emit_edge_observation_sanitizes_payload_before_writer_boundary() -> Non
                 "query_params": {"api_key": "sk-query-secret", "safe": "value"},
             },
             "response_body": "raw response body",
+            "input": {"text": "raw input text"},
         },
     )
 
@@ -79,11 +126,13 @@ def test_emit_edge_observation_sanitizes_payload_before_writer_boundary() -> Non
     serialized = json.dumps(event, sort_keys=True)
     assert "raw confidential body" not in serialized
     assert "raw response body" not in serialized
+    assert "raw input text" not in serialized
     assert "sk-query-secret" not in serialized
     assert event["request"]["request_body"] == REDACTED_VALUE
     assert event["request"]["query_params"]["api_key"] == REDACTED_VALUE
     assert event["request"]["query_params"]["safe"] == "value"
     assert event["response_body"] == REDACTED_VALUE
+    assert event["input"]["text"] == REDACTED_VALUE
 
 
 def test_emit_edge_observation_suppresses_guard_or_writer_failures() -> None:

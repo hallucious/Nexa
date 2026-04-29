@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from typing import Any, Mapping
 
 from src.server.edge_observability_runtime import REDACTED_VALUE, redact_headers, redact_mapping
+from src.server.observability_payload_guard import sanitize_observability_payload
 
 
 SENTRY_DISABLED_REASON = "sentry_disabled"
@@ -126,7 +127,22 @@ def _scrub_mapping(mapping: Mapping[str, Any]) -> dict[str, Any]:
             scrubbed[key_text] = _redact_sensitive_key_value(key_text, [_scrub_collection(item) for item in value])
         else:
             scrubbed[key_text] = _redact_sensitive_key_value(key_text, _redact_text(value))
-    return scrubbed
+    sanitized = sanitize_observability_payload(scrubbed)
+    return dict(sanitized) if isinstance(sanitized, Mapping) else {}
+
+
+def _scrub_sentry_exception_values(event: dict[str, Any]) -> None:
+    exception = event.get("exception")
+    if not isinstance(exception, Mapping):
+        return
+    values = exception.get("values")
+    if not isinstance(values, list):
+        return
+    for item in values:
+        if isinstance(item, dict) and "value" in item:
+            # Exception messages are unsafe by default; they can include raw
+            # document text, prompt fragments, provider output, SQL, or secrets.
+            item["value"] = REDACTED_VALUE
 
 
 def scrub_sentry_event(event: Mapping[str, Any] | None, hint: Mapping[str, Any] | None = None) -> dict[str, Any] | None:
@@ -153,7 +169,9 @@ def scrub_sentry_event(event: Mapping[str, Any] | None, hint: Mapping[str, Any] 
                 user_dict[key] = REDACTED_VALUE
         scrubbed["user"] = user_dict
 
-    return scrubbed
+    _scrub_sentry_exception_values(scrubbed)
+    sanitized = sanitize_observability_payload(scrubbed)
+    return dict(sanitized) if isinstance(sanitized, Mapping) else None
 
 
 def _resolve_sentry_sdk(sdk_module: Any | None) -> tuple[Any | None, str | None]:

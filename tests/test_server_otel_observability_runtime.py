@@ -56,6 +56,42 @@ def test_build_otel_safe_attributes_redacts_sql_bodies_and_credentials() -> None
     assert attributes["nested"]["safe"] == "value"
 
 
+def test_build_otel_safe_attributes_redacts_context_paths_and_contract_outputs() -> None:
+    attributes = build_otel_safe_attributes(
+        {
+            "input": {"text": "raw uploaded contract text"},
+            "prompt": {"main": {"rendered": "rendered prompt with raw text"}},
+            "provider": {"anthropic": {"output": "provider output with raw clause"}},
+            "contract_review_result": {
+                "clauses": [
+                    {
+                        "text": "raw clause",
+                        "plain_text": "plain clause explanation",
+                        "why_it_matters": "raw reason",
+                    }
+                ],
+                "pre_signature_questions": [{"question": "raw contract question"}],
+            },
+            "safe": "value",
+        }
+    )
+
+    serialized = json.dumps(attributes, sort_keys=True)
+    assert "raw uploaded contract text" not in serialized
+    assert "rendered prompt with raw text" not in serialized
+    assert "provider output with raw clause" not in serialized
+    assert "raw clause" not in serialized
+    assert "plain clause explanation" not in serialized
+    assert "raw reason" not in serialized
+    assert "raw contract question" not in serialized
+    assert attributes["input"]["text"] == REDACTED_VALUE
+    assert attributes["prompt"]["main"]["rendered"] == REDACTED_VALUE
+    assert attributes["provider"]["anthropic"]["output"] == REDACTED_VALUE
+    assert attributes["contract_review_result"]["clauses"][0]["plain_text"] == REDACTED_VALUE
+    assert attributes["contract_review_result"]["pre_signature_questions"][0]["question"] == REDACTED_VALUE
+    assert attributes["safe"] == "value"
+
+
 def test_build_otel_http_server_attributes_scrubs_request_boundary() -> None:
     attributes = build_otel_http_server_attributes(
         method="post",
@@ -131,6 +167,18 @@ def test_build_otel_exception_event_redacts_exception_message_and_attributes() -
     assert event["attributes"]["exception.type"] == "RuntimeError"
     assert event["attributes"]["exception.message"] == REDACTED_VALUE
     assert event["attributes"]["request_body"] == REDACTED_VALUE
+    assert event["attributes"]["safe"] == "value"
+
+
+def test_build_otel_exception_event_redacts_non_secret_document_exception_message() -> None:
+    event = build_otel_exception_event(
+        exc=RuntimeError("parser failed on raw uploaded contract text"),
+        attributes={"safe": "value"},
+    )
+
+    serialized = json.dumps(event, sort_keys=True)
+    assert "raw uploaded contract text" not in serialized
+    assert event["attributes"]["exception.message"] == REDACTED_VALUE
     assert event["attributes"]["safe"] == "value"
 
 
