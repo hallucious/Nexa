@@ -155,6 +155,7 @@ def register_fastapi_edge_middleware(
         redis_client=_resolve_redis_client(dependencies),
         redis_key_prefix=str(getattr(config, "rate_limit_redis_key_prefix", "nexa:edge:rate-limit") or "nexa:edge:rate-limit"),
         redis_fail_open=bool(getattr(config, "rate_limit_redis_fail_open", True)),
+        datastore_span_writer=(getattr(dependencies, "otel_span_writer", None) if bool(getattr(config, "otel_enabled", False)) else None),
     )
 
     @app.middleware("http")

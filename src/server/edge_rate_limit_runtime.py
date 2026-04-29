@@ -1,7 +1,15 @@
 from __future__ import annotations
 
+import time
 from dataclasses import dataclass
 from typing import Any, Protocol
+
+from src.server.otel_datastore_runtime import (
+    OtelDatastoreSpanWriter,
+    build_otel_datastore_exception_event,
+    build_otel_redis_span_attributes,
+    emit_otel_datastore_span,
+)
 
 
 EDGE_RATE_LIMIT_BACKEND_MEMORY = "memory"
@@ -66,6 +74,7 @@ class RedisEdgeRateLimiter:
         window_seconds: int,
         key_prefix: str = "nexa:edge:rate-limit",
         fail_open: bool = True,
+        datastore_span_writer: OtelDatastoreSpanWriter | None = None,
     ) -> None:
         if requests_per_window < 1:
             raise ValueError("requests_per_window must be positive")
@@ -76,6 +85,7 @@ class RedisEdgeRateLimiter:
         self.window_seconds = int(window_seconds)
         self.key_prefix = str(key_prefix or "nexa:edge:rate-limit").strip() or "nexa:edge:rate-limit"
         self.fail_open = bool(fail_open)
+        self.datastore_span_writer = datastore_span_writer
 
     def backend_status(self) -> EdgeRateLimitBackendStatus:
         return EdgeRateLimitBackendStatus(
@@ -91,24 +101,76 @@ class RedisEdgeRateLimiter:
         if self.redis_client is None:
             return self._redis_unavailable_result()
         redis_key = redis_rate_limit_key(namespace=self.key_prefix, identity=key, window_seconds=self.window_seconds)
+        started_at = time.perf_counter()
         try:
             count = int(self.redis_client.incr(redis_key))
             if count == 1 and hasattr(self.redis_client, "expire"):
                 self.redis_client.expire(redis_key, self.window_seconds)
             if count > self.requests_per_window:
                 retry_after = self._retry_after(redis_key)
+                self._emit_redis_command_span(
+                    command="INCR",
+                    key=redis_key,
+                    started_at=started_at,
+                    hit=False,
+                    extra={
+                        "nexa.rate_limit.allowed": False,
+                        "nexa.rate_limit.count": count,
+                        "nexa.rate_limit.limit": self.requests_per_window,
+                        "nexa.rate_limit.retry_after_s": retry_after,
+                    },
+                )
                 return False, retry_after
+            self._emit_redis_command_span(
+                command="INCR",
+                key=redis_key,
+                started_at=started_at,
+                hit=True,
+                extra={
+                    "nexa.rate_limit.allowed": True,
+                    "nexa.rate_limit.count": count,
+                    "nexa.rate_limit.limit": self.requests_per_window,
+                },
+            )
             return True, 0
-        except Exception:
+        except Exception as exc:  # noqa: BLE001
+            self._emit_redis_command_span(
+                command="INCR",
+                key=redis_key,
+                started_at=started_at,
+                hit=None,
+                extra={
+                    "nexa.rate_limit.outcome": EDGE_RATE_LIMIT_REDIS_ERROR_REASON,
+                    "nexa.rate_limit.fail_open": self.fail_open,
+                },
+                exc=exc,
+            )
             return self._redis_unavailable_result()
 
     def _retry_after(self, redis_key: str) -> int:
         ttl_value = None
+        started_at = time.perf_counter()
         if hasattr(self.redis_client, "ttl"):
             try:
                 ttl_value = int(self.redis_client.ttl(redis_key))
-            except Exception:
+            except Exception as exc:  # noqa: BLE001
+                self._emit_redis_command_span(
+                    command="TTL",
+                    key=redis_key,
+                    started_at=started_at,
+                    hit=None,
+                    extra={"nexa.rate_limit.outcome": EDGE_RATE_LIMIT_REDIS_ERROR_REASON},
+                    exc=exc,
+                )
                 ttl_value = None
+            else:
+                self._emit_redis_command_span(
+                    command="TTL",
+                    key=redis_key,
+                    started_at=started_at,
+                    hit=None,
+                    extra={"nexa.rate_limit.ttl_s": ttl_value},
+                )
         if ttl_value is None or ttl_value < 1:
             return max(1, self.window_seconds)
         return ttl_value
@@ -117,6 +179,37 @@ class RedisEdgeRateLimiter:
         if self.fail_open:
             return True, 0
         return False, max(1, self.window_seconds)
+
+    def _emit_redis_command_span(
+        self,
+        *,
+        command: str,
+        key: str,
+        started_at: float,
+        hit: bool | None,
+        extra: dict[str, Any] | None = None,
+        exc: BaseException | None = None,
+    ) -> None:
+        if self.datastore_span_writer is None:
+            return
+        duration_ms = max(0, int((time.perf_counter() - started_at) * 1000))
+        attributes = build_otel_redis_span_attributes(
+            command=command,
+            key=key,
+            key_prefix=self.key_prefix,
+            duration_ms=duration_ms,
+            hit=hit,
+            extra=extra,
+        )
+        events = None
+        if exc is not None:
+            events = [build_otel_datastore_exception_event(exc=exc, attributes=attributes)]
+        emit_otel_datastore_span(
+            self.datastore_span_writer,
+            name="redis.rate_limit.command",
+            attributes=attributes,
+            events=events,
+        )
 
 
 def build_edge_rate_limiter(
@@ -128,6 +221,7 @@ def build_edge_rate_limiter(
     redis_key_prefix: str = "nexa:edge:rate-limit",
     redis_fail_open: bool = True,
     in_memory_factory: Any | None = None,
+    datastore_span_writer: OtelDatastoreSpanWriter | None = None,
 ) -> EdgeRateLimiter:
     normalized_backend = normalize_rate_limit_backend(backend)
     if normalized_backend == EDGE_RATE_LIMIT_BACKEND_REDIS:
@@ -137,6 +231,7 @@ def build_edge_rate_limiter(
             window_seconds=window_seconds,
             key_prefix=redis_key_prefix,
             fail_open=redis_fail_open,
+            datastore_span_writer=datastore_span_writer,
         )
     if in_memory_factory is None:
         from src.server.edge_security_runtime import InMemoryEdgeRateLimiter

@@ -29,9 +29,17 @@ SUBSTRATE NOTE (Batch 2A scope):
 """
 from __future__ import annotations
 
+import time
 from datetime import datetime, timedelta, timezone
 from typing import Any, Mapping, Optional, Sequence
 from uuid import uuid4
+
+from src.server.otel_datastore_runtime import (
+    OtelDatastoreSpanWriter,
+    build_otel_database_span_attributes,
+    build_otel_datastore_exception_event,
+    emit_otel_datastore_span,
+)
 
 _ALLOWED_SUBMISSION_STATUSES = {
     "submitted",
@@ -75,28 +83,125 @@ def _row_dict(row: Any) -> dict[str, Any]:
     return {str(key): value for key, value in dict(mapping).items()}
 
 
-def _fetch_one(engine: Engine, sql: str, params: Mapping[str, Any]) -> dict[str, Any] | None:
+def _sql_operation(sql: str, *, default: str = "unknown") -> str:
+    for token in str(sql or "").replace("\n", " ").split(" "):
+        text_token = token.strip()
+        if text_token:
+            return text_token.upper()
+    return default.upper()
+
+
+def _emit_database_span(
+    writer: OtelDatastoreSpanWriter | None,
+    *,
+    query_label: str,
+    statement: str,
+    parameters: Mapping[str, Any] | Sequence[Any] | None,
+    started_at: float,
+    row_count: int | None = None,
+    exc: BaseException | None = None,
+) -> None:
+    if writer is None:
+        return
+    duration_ms = max(0, int((time.perf_counter() - started_at) * 1000))
+    attributes = build_otel_database_span_attributes(
+        operation=_sql_operation(statement),
+        table_name="run_submissions",
+        query_label=query_label,
+        statement=statement,
+        parameters=parameters,
+        row_count=row_count,
+        duration_ms=duration_ms,
+    )
+    events = None
+    if exc is not None:
+        events = [build_otel_datastore_exception_event(exc=exc, attributes=attributes)]
+    emit_otel_datastore_span(
+        writer,
+        name="db.run_submissions.query",
+        attributes=attributes,
+        events=events,
+    )
+
+
+def _fetch_one(
+    engine: Engine,
+    sql: str,
+    params: Mapping[str, Any],
+    *,
+    query_label: str = "run_submissions.fetch_one",
+    otel_span_writer: OtelDatastoreSpanWriter | None = None,
+) -> dict[str, Any] | None:
     _require_sqlalchemy()
-    with engine.connect() as conn:
-        result = conn.execute(text(sql), params)
-        row = result.fetchone()
-        return _row_dict(row) if row is not None else None
+    started_at = time.perf_counter()
+    try:
+        with engine.connect() as conn:
+            result = conn.execute(text(sql), params)
+            row = result.fetchone()
+    except Exception as exc:  # noqa: BLE001
+        _emit_database_span(
+            otel_span_writer,
+            query_label=query_label,
+            statement=sql,
+            parameters=params,
+            started_at=started_at,
+            exc=exc,
+        )
+        raise
+    _emit_database_span(
+        otel_span_writer,
+        query_label=query_label,
+        statement=sql,
+        parameters=params,
+        started_at=started_at,
+        row_count=1 if row is not None else 0,
+    )
+    return _row_dict(row) if row is not None else None
 
 
-def _execute_rowcount(engine: Engine, sql: str, params: Mapping[str, Any]) -> int:
+def _execute_rowcount(
+    engine: Engine,
+    sql: str,
+    params: Mapping[str, Any],
+    *,
+    query_label: str = "run_submissions.execute_rowcount",
+    otel_span_writer: OtelDatastoreSpanWriter | None = None,
+) -> int:
     """Execute a DML statement and return the number of affected rows."""
     _require_sqlalchemy()
-    with engine.begin() as conn:
-        result = conn.execute(text(sql), params)
-        return result.rowcount or 0
+    started_at = time.perf_counter()
+    try:
+        with engine.begin() as conn:
+            result = conn.execute(text(sql), params)
+            row_count = result.rowcount or 0
+    except Exception as exc:  # noqa: BLE001
+        _emit_database_span(
+            otel_span_writer,
+            query_label=query_label,
+            statement=sql,
+            parameters=params,
+            started_at=started_at,
+            exc=exc,
+        )
+        raise
+    _emit_database_span(
+        otel_span_writer,
+        query_label=query_label,
+        statement=sql,
+        parameters=params,
+        started_at=started_at,
+        row_count=row_count,
+    )
+    return row_count
 
 
 class PostgresRunSubmissionStore:
     """Postgres-backed store for run_submissions rows."""
 
-    def __init__(self, engine: Engine) -> None:
+    def __init__(self, engine: Engine, *, otel_span_writer: OtelDatastoreSpanWriter | None = None) -> None:
         _require_sqlalchemy()
         self._engine = engine
+        self._otel_span_writer = otel_span_writer
 
     # ------------------------------------------------------------------ #
     # Write: insert
@@ -141,12 +246,7 @@ class PostgresRunSubmissionStore:
         submission_id = f"sub_{uuid4().hex}"
         now = _now_iso()
 
-        _require_sqlalchemy()
-        with self._engine.begin() as conn:
-            try:
-                conn.execute(
-                    text(
-                        """
+        insert_sql = """
                         INSERT INTO run_submissions (
                             submission_id, run_id, workspace_id, run_request_id,
                             submitter_user_ref, target_type, target_ref,
@@ -161,37 +261,59 @@ class PostgresRunSubmissionStore:
                             :submitted_at, :created_at, :updated_at
                         )
                         """
-                    ),
-                    {
-                        "submission_id": submission_id,
-                        "run_id": run_id,
-                        "workspace_id": workspace_id,
-                        "run_request_id": run_request_id,
-                        "submitter_user_ref": submitter_user_ref,
-                        "target_type": target_type,
-                        "target_ref": target_ref,
-                        "provider_id": provider_id,
-                        "model_id": model_id,
-                        "priority": priority,
-                        "mode": mode,
-                        "queue_name": queue_name,
-                        "submitted_at": now,
-                        "created_at": now,
-                        "updated_at": now,
-                    },
-                )
+        insert_params = {
+            "submission_id": submission_id,
+            "run_id": run_id,
+            "workspace_id": workspace_id,
+            "run_request_id": run_request_id,
+            "submitter_user_ref": submitter_user_ref,
+            "target_type": target_type,
+            "target_ref": target_ref,
+            "provider_id": provider_id,
+            "model_id": model_id,
+            "priority": priority,
+            "mode": mode,
+            "queue_name": queue_name,
+            "submitted_at": now,
+            "created_at": now,
+            "updated_at": now,
+        }
+
+        _require_sqlalchemy()
+        started_at = time.perf_counter()
+        with self._engine.begin() as conn:
+            try:
+                conn.execute(text(insert_sql), insert_params)
             except Exception as exc:  # noqa: BLE001
+                _emit_database_span(
+                    self._otel_span_writer,
+                    query_label="run_submissions.insert_submission",
+                    statement=insert_sql,
+                    parameters=insert_params,
+                    started_at=started_at,
+                    exc=exc,
+                )
                 exc_str = str(exc).lower()
                 if "unique" in exc_str or "duplicate" in exc_str or "uq_run_submissions" in exc_str:
                     existing = _fetch_one(
                         self._engine,
                         "SELECT submission_id FROM run_submissions WHERE run_request_id = :req_id LIMIT 1",
                         {"req_id": run_request_id},
+                        query_label="run_submissions.get_existing_submission_after_duplicate",
+                        otel_span_writer=self._otel_span_writer,
                     )
                     if existing:
                         return str(existing["submission_id"])
                 raise
 
+        _emit_database_span(
+            self._otel_span_writer,
+            query_label="run_submissions.insert_submission",
+            statement=insert_sql,
+            parameters=insert_params,
+            started_at=started_at,
+            row_count=1,
+        )
         return submission_id
 
     # ------------------------------------------------------------------ #
@@ -223,6 +345,8 @@ class PostgresRunSubmissionStore:
                 "queued_at": now,
                 "updated_at": now,
             },
+            query_label="run_submissions.mark_queued",
+            otel_span_writer=self._otel_span_writer,
         ) > 0
 
     def mark_claimed(self, *, run_id: str) -> bool:
@@ -249,6 +373,8 @@ class PostgresRunSubmissionStore:
               AND submission_status = 'queued'
             """,
             {"run_id": run_id, "claimed_at": now, "updated_at": now},
+            query_label="run_submissions.mark_claimed",
+            otel_span_writer=self._otel_span_writer,
         ) > 0
 
     def mark_running(self, *, run_id: str) -> bool:
@@ -267,6 +393,8 @@ class PostgresRunSubmissionStore:
               AND submission_status = 'claimed'
             """,
             {"run_id": run_id, "updated_at": now},
+            query_label="run_submissions.mark_running",
+            otel_span_writer=self._otel_span_writer,
         ) > 0
 
     def mark_completed(self, *, run_id: str, ttl_s: int = _DEFAULT_TERMINAL_TTL_S) -> bool:
@@ -289,6 +417,8 @@ class PostgresRunSubmissionStore:
               AND submission_status = 'running'
             """,
             {"run_id": run_id, "terminal_at": now, "expires_at": expires, "updated_at": now},
+            query_label="run_submissions.mark_completed",
+            otel_span_writer=self._otel_span_writer,
         ) > 0
 
     def mark_failed(
@@ -320,6 +450,8 @@ class PostgresRunSubmissionStore:
                 "expires_at": expires,
                 "updated_at": now,
             },
+            query_label="run_submissions.mark_failed",
+            otel_span_writer=self._otel_span_writer,
         ) > 0
 
     def mark_lost_redis(self, *, run_id: str, ttl_s: int = _DEFAULT_TERMINAL_TTL_S) -> bool:
@@ -342,6 +474,8 @@ class PostgresRunSubmissionStore:
               AND submission_status IN ('submitted', 'queued', 'requeued', 'claimed', 'running')
             """,
             {"run_id": run_id, "terminal_at": now, "expires_at": expires, "updated_at": now},
+            query_label="run_submissions.mark_lost_redis",
+            otel_span_writer=self._otel_span_writer,
         ) > 0
 
     def mark_requeued(self, *, run_id: str, queue_job_id: str) -> bool:
@@ -366,6 +500,8 @@ class PostgresRunSubmissionStore:
               AND submission_status IN ('failed', 'lost_redis')
             """,
             {"run_id": run_id, "queue_job_id": queue_job_id, "queued_at": now, "updated_at": now},
+            query_label="run_submissions.mark_requeued",
+            otel_span_writer=self._otel_span_writer,
         ) > 0
 
     # ------------------------------------------------------------------ #
@@ -377,6 +513,8 @@ class PostgresRunSubmissionStore:
             self._engine,
             "SELECT * FROM run_submissions WHERE run_id = :run_id LIMIT 1",
             {"run_id": run_id},
+            query_label="run_submissions.get_by_run_id",
+            otel_span_writer=self._otel_span_writer,
         )
 
     def get_by_submission_id(self, submission_id: str) -> dict[str, Any] | None:
@@ -384,6 +522,8 @@ class PostgresRunSubmissionStore:
             self._engine,
             "SELECT * FROM run_submissions WHERE submission_id = :sid LIMIT 1",
             {"sid": submission_id},
+            query_label="run_submissions.get_by_submission_id",
+            otel_span_writer=self._otel_span_writer,
         )
 
     def get_by_run_request_id(self, run_request_id: str) -> dict[str, Any] | None:
@@ -392,44 +532,82 @@ class PostgresRunSubmissionStore:
             self._engine,
             "SELECT * FROM run_submissions WHERE run_request_id = :req_id LIMIT 1",
             {"req_id": run_request_id},
+            query_label="run_submissions.get_by_run_request_id",
+            otel_span_writer=self._otel_span_writer,
         )
 
     def list_orphaned_submissions(self, *, older_than_s: int = 300) -> Sequence[dict[str, Any]]:
         """Return submissions stuck in non-terminal states beyond the age threshold."""
         cutoff = (datetime.now(timezone.utc) - timedelta(seconds=older_than_s)).isoformat()
-        _require_sqlalchemy()
-        with self._engine.connect() as conn:
-            result = conn.execute(
-                text(
-                    """
+        sql = """
                     SELECT * FROM run_submissions
                     WHERE submission_status IN ('submitted', 'queued', 'requeued', 'claimed', 'running')
                       AND updated_at < :cutoff
                     ORDER BY submitted_at ASC
                     """
-                ),
-                {"cutoff": cutoff},
+        params = {"cutoff": cutoff}
+        _require_sqlalchemy()
+        started_at = time.perf_counter()
+        try:
+            with self._engine.connect() as conn:
+                result = conn.execute(text(sql), params)
+                rows = [_row_dict(row) for row in result.fetchall()]
+        except Exception as exc:  # noqa: BLE001
+            _emit_database_span(
+                self._otel_span_writer,
+                query_label="run_submissions.list_orphaned_submissions",
+                statement=sql,
+                parameters=params,
+                started_at=started_at,
+                exc=exc,
             )
-            return [_row_dict(row) for row in result.fetchall()]
+            raise
+        _emit_database_span(
+            self._otel_span_writer,
+            query_label="run_submissions.list_orphaned_submissions",
+            statement=sql,
+            parameters=params,
+            started_at=started_at,
+            row_count=len(rows),
+        )
+        return rows
 
     def list_expired_terminal_submissions(self) -> Sequence[dict[str, Any]]:
         """Return terminal rows whose expires_at has passed (cleanup candidates)."""
         now = _now_iso()
-        _require_sqlalchemy()
-        with self._engine.connect() as conn:
-            result = conn.execute(
-                text(
-                    """
+        sql = """
                     SELECT * FROM run_submissions
                     WHERE submission_status IN ('completed', 'failed', 'lost_redis')
                       AND expires_at IS NOT NULL
                       AND expires_at < :now
                     ORDER BY terminal_at ASC
                     """
-                ),
-                {"now": now},
+        params = {"now": now}
+        _require_sqlalchemy()
+        started_at = time.perf_counter()
+        try:
+            with self._engine.connect() as conn:
+                result = conn.execute(text(sql), params)
+                rows = [_row_dict(row) for row in result.fetchall()]
+        except Exception as exc:  # noqa: BLE001
+            _emit_database_span(
+                self._otel_span_writer,
+                query_label="run_submissions.list_expired_terminal_submissions",
+                statement=sql,
+                parameters=params,
+                started_at=started_at,
+                exc=exc,
             )
-            return [_row_dict(row) for row in result.fetchall()]
+            raise
+        _emit_database_span(
+            self._otel_span_writer,
+            query_label="run_submissions.list_expired_terminal_submissions",
+            statement=sql,
+            parameters=params,
+            started_at=started_at,
+            row_count=len(rows),
+        )
+        return rows
 
     # ------------------------------------------------------------------ #
     # Cleanup
@@ -438,17 +616,15 @@ class PostgresRunSubmissionStore:
     def delete_expired_terminal_submissions(self) -> int:
         """Delete terminal rows past their expires_at TTL. Returns deleted count."""
         now = _now_iso()
-        _require_sqlalchemy()
-        with self._engine.begin() as conn:
-            result = conn.execute(
-                text(
-                    """
+        return _execute_rowcount(
+            self._engine,
+            """
                     DELETE FROM run_submissions
                     WHERE submission_status IN ('completed', 'failed', 'lost_redis')
                       AND expires_at IS NOT NULL
                       AND expires_at < :now
-                    """
-                ),
-                {"now": now},
-            )
-            return result.rowcount or 0
+                    """,
+            {"now": now},
+            query_label="run_submissions.delete_expired_terminal_submissions",
+            otel_span_writer=self._otel_span_writer,
+        )
