@@ -1,12 +1,14 @@
 from __future__ import annotations
 
 from dataclasses import replace
-from typing import Any
+from typing import Any, Callable
 
 from sqlalchemy import inspect
 from sqlalchemy.exc import SQLAlchemyError
 
 from src.server.fastapi_binding_models import FastApiRouteDependencies
+from src.server.gdpr_deletion_dependency_factory import build_gdpr_deletion_router_provider
+from src.server.gdpr_deletion_schema import GDPR_USER_DELETION_AUDIT_TABLE
 from src.server.provider_secret_api import default_provider_catalog_rows
 from src.server.run_admission_models import ExecutionTargetCatalogEntry
 from src.storage.nex_api import resolve_nex_execution_target
@@ -44,9 +46,46 @@ def _table_exists(engine: Any, table_name: str) -> bool:
         return True
 
 
+def build_postgres_gdpr_deletion_router_provider_if_available(
+    *,
+    sync_engine: Any,
+    object_storage_client: Any | None = None,
+    object_storage_bucket: str | None = None,
+    identity_deleter: Callable[[str], bool] | None = None,
+):
+    """Return an opt-in GDPR deletion router provider when dependencies exist.
+
+    Production GDPR deletion execution requires both:
+    - the permanent ``user_deletion_audit`` table, and
+    - an explicit object-storage client for user-owned object deletion.
+
+    If either is absent, the route remains unmounted. This keeps public app
+    construction safe and avoids exposing a deletion route that cannot write
+    audit evidence or delete objects correctly.
+    """
+
+    if object_storage_client is None:
+        return None
+    if not _table_exists(sync_engine, GDPR_USER_DELETION_AUDIT_TABLE):
+        return None
+    return build_gdpr_deletion_router_provider(
+        sync_engine=sync_engine,
+        object_storage_client=object_storage_client,
+        default_bucket=object_storage_bucket,
+        identity_deleter=identity_deleter,
+    )
+
+
 # ``async_engine`` is intentionally typed as ``Any`` here so importing this module does
 # not force optional SQLAlchemy async availability in non-Postgres environments.
-def build_postgres_dependencies(async_engine: Any, *, sync_engine: Any | None = None) -> FastApiRouteDependencies:
+def build_postgres_dependencies(
+    async_engine: Any,
+    *,
+    sync_engine: Any | None = None,
+    gdpr_object_storage_client: Any | None = None,
+    gdpr_object_storage_bucket: str | None = None,
+    gdpr_identity_deleter: Callable[[str], bool] | None = None,
+) -> FastApiRouteDependencies:
     """Return the initial Postgres-backed dependency bundle.
 
     This batch wires the first persistence-backed continuity stores into the
@@ -73,6 +112,12 @@ def build_postgres_dependencies(async_engine: Any, *, sync_engine: Any | None = 
     file_extraction_tables_available = _table_exists(resolved_sync_engine, "file_extractions") and _table_exists(resolved_sync_engine, "file_extraction_events")
     public_share_action_report_store = PostgresPublicShareActionReportStore(resolved_sync_engine)
     saved_public_share_store = PostgresSavedPublicShareStore(resolved_sync_engine)
+    gdpr_deletion_router_provider = build_postgres_gdpr_deletion_router_provider_if_available(
+        sync_engine=resolved_sync_engine,
+        object_storage_client=gdpr_object_storage_client,
+        object_storage_bucket=gdpr_object_storage_bucket,
+        identity_deleter=gdpr_identity_deleter,
+    )
     dependencies = bind_workspace_registry_store(
         dependencies=dependencies,
         store=workspace_registry_store,
@@ -99,6 +144,7 @@ def build_postgres_dependencies(async_engine: Any, *, sync_engine: Any | None = 
     )
     run_projection_store = PostgresRunProjectionStore(resolved_sync_engine, workspace_registry_store=workspace_registry_store)
     append_only_projection_store = PostgresAppendOnlyProjectionStore(resolved_sync_engine)
+
     def _target_catalog_provider(workspace_id: str) -> dict[str, ExecutionTargetCatalogEntry]:
         source = workspace_artifact_source_store.get(workspace_id)
         if source is None:
@@ -144,5 +190,12 @@ def build_postgres_dependencies(async_engine: Any, *, sync_engine: Any | None = 
         saved_public_share_rows_provider=saved_public_share_store.list_rows,
         saved_public_share_writer=saved_public_share_store.write,
         saved_public_share_deleter=saved_public_share_store.delete,
+        gdpr_deletion_router_provider=gdpr_deletion_router_provider,
     )
     return dependencies
+
+
+__all__ = [
+    "build_postgres_dependencies",
+    "build_postgres_gdpr_deletion_router_provider_if_available",
+]
