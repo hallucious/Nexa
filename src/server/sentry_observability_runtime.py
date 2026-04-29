@@ -226,6 +226,46 @@ def initialize_sentry_observability(
     )
 
 
+def initialize_sentry_from_config(config: Any, *, sdk_module: Any | None = None) -> SentryInitializationResult:
+    """Initialize Sentry from a FastAPI/server config-like object.
+
+    Keeping this adapter here avoids duplicating configuration extraction in API
+    and worker bootstrap paths while still making Sentry optional and no-op safe.
+    """
+
+    return initialize_sentry_observability(
+        enabled=bool(getattr(config, "sentry_enabled", False)),
+        dsn=getattr(config, "sentry_dsn", None),
+        environment=str(getattr(config, "sentry_environment", "local") or "local"),
+        release=getattr(config, "sentry_release", None),
+        traces_sample_rate=float(getattr(config, "sentry_traces_sample_rate", 0.0) or 0.0),
+        sdk_module=sdk_module,
+    )
+
+
+def build_sentry_exception_event(*, exc: BaseException, context: Mapping[str, Any] | None = None) -> dict[str, Any] | None:
+    """Build the exact scrubbed event used by exception capture.
+
+    This makes API and worker integration testable without a Sentry SDK and
+    guarantees the event is scrubbed before it reaches any SDK boundary.
+    """
+
+    return scrub_sentry_event(
+        {
+            "level": "error",
+            "exception": {
+                "values": [
+                    {
+                        "type": exc.__class__.__name__,
+                        "value": str(exc),
+                    }
+                ]
+            },
+            "extra": dict(context or {}),
+        }
+    )
+
+
 def capture_sentry_exception(
     *,
     exc: BaseException,
@@ -246,20 +286,7 @@ def capture_sentry_exception(
     if sdk is None:
         return SentryCaptureResult(enabled=True, captured=False, reason=missing_reason or SENTRY_SDK_MISSING_REASON)
 
-    event = scrub_sentry_event(
-        {
-            "level": "error",
-            "exception": {
-                "values": [
-                    {
-                        "type": exc.__class__.__name__,
-                        "value": str(exc),
-                    }
-                ]
-            },
-            "extra": dict(context or {}),
-        }
-    )
+    event = build_sentry_exception_event(exc=exc, context=context)
     if event is None:
         return SentryCaptureResult(enabled=True, captured=False, reason=SENTRY_CAPTURE_FAILED_REASON)
 
@@ -282,6 +309,23 @@ def capture_sentry_exception(
     )
 
 
+def capture_sentry_exception_from_config(
+    *,
+    config: Any,
+    exc: BaseException,
+    context: Mapping[str, Any] | None = None,
+    sdk_module: Any | None = None,
+) -> SentryCaptureResult:
+    """Capture an exception using a FastAPI/server config-like object."""
+
+    return capture_sentry_exception(
+        exc=exc,
+        enabled=bool(getattr(config, "sentry_enabled", False)),
+        context=context,
+        sdk_module=sdk_module,
+    )
+
+
 __all__ = [
     "SENTRY_CAPTURE_FAILED_REASON",
     "SENTRY_CAPTURED_REASON",
@@ -292,7 +336,10 @@ __all__ = [
     "SENTRY_SDK_MISSING_REASON",
     "SentryCaptureResult",
     "SentryInitializationResult",
+    "build_sentry_exception_event",
     "capture_sentry_exception",
+    "capture_sentry_exception_from_config",
+    "initialize_sentry_from_config",
     "initialize_sentry_observability",
     "scrub_sentry_event",
 ]

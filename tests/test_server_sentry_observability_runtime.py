@@ -3,13 +3,17 @@ from __future__ import annotations
 import json
 
 from src.server.edge_observability_runtime import REDACTED_VALUE
+from src.server.fastapi_binding_models import FastApiBindingConfig
 from src.server.sentry_observability_runtime import (
     SENTRY_CAPTURE_FAILED_REASON,
     SENTRY_CAPTURED_REASON,
     SENTRY_DISABLED_REASON,
     SENTRY_DSN_MISSING_REASON,
     SENTRY_INITIALIZED_REASON,
+    build_sentry_exception_event,
     capture_sentry_exception,
+    capture_sentry_exception_from_config,
+    initialize_sentry_from_config,
     initialize_sentry_observability,
     scrub_sentry_event,
 )
@@ -200,3 +204,88 @@ def test_sentry_capture_exception_suppresses_sdk_failures() -> None:
     assert result.enabled is True
     assert result.captured is False
     assert result.reason == SENTRY_CAPTURE_FAILED_REASON
+
+
+def test_initialize_sentry_from_fastapi_config_uses_config_fields() -> None:
+    fake_sdk = _FakeSentrySdk()
+    config = FastApiBindingConfig(
+        sentry_enabled=True,
+        sentry_dsn="https://examplePublicKey@o0.ingest.sentry.io/0",
+        sentry_environment="staging",
+        sentry_release="nexa-release-001",
+        sentry_traces_sample_rate=0.5,
+    )
+
+    result = initialize_sentry_from_config(config, sdk_module=fake_sdk)
+
+    assert result.initialized is True
+    assert result.reason == SENTRY_INITIALIZED_REASON
+    assert fake_sdk.init_kwargs is not None
+    assert fake_sdk.init_kwargs["environment"] == "staging"
+    assert fake_sdk.init_kwargs["release"] == "nexa-release-001"
+    assert fake_sdk.init_kwargs["traces_sample_rate"] == 0.5
+    assert fake_sdk.init_kwargs["send_default_pii"] is False
+
+
+def test_build_sentry_exception_event_is_scrubbed_before_sdk_boundary() -> None:
+    event = build_sentry_exception_event(
+        exc=RuntimeError("exception message contains sk-runtime-secret"),
+        context={
+            "workspace_id": "ws-001",
+            "api_key": "sk-context-secret",
+            "request": {
+                "query_string": "token=sk-query-secret",
+                "headers": {"Authorization": "Bearer sk-header-secret", "User-Agent": "pytest-client"},
+                "json": {"prompt": "raw confidential user content"},
+            },
+        },
+    )
+
+    assert event is not None
+    event_text = json.dumps(event, sort_keys=True)
+    assert "sk-runtime-secret" not in event_text
+    assert "sk-context-secret" not in event_text
+    assert "sk-query-secret" not in event_text
+    assert "sk-header-secret" not in event_text
+    assert "raw confidential user content" not in event_text
+    assert event["extra"]["workspace_id"] == "ws-001"
+    assert event["extra"]["api_key"] == REDACTED_VALUE
+    assert event["extra"]["request"]["headers"]["authorization"] == REDACTED_VALUE
+    assert event["extra"]["request"]["headers"]["user-agent"] == "pytest-client"
+    assert event["extra"]["request"]["json"] == REDACTED_VALUE
+
+
+def test_capture_sentry_exception_from_fastapi_config_respects_disabled_default() -> None:
+    fake_sdk = _FakeSentrySdk()
+    result = capture_sentry_exception_from_config(
+        config=FastApiBindingConfig(),
+        sdk_module=fake_sdk,
+        exc=RuntimeError("contains sk-secret"),
+        context={"token": "sk-context-secret"},
+    )
+
+    assert result.enabled is False
+    assert result.captured is False
+    assert result.reason == SENTRY_DISABLED_REASON
+    assert fake_sdk.captured_events == []
+
+
+def test_capture_sentry_exception_from_fastapi_config_captures_when_enabled() -> None:
+    fake_sdk = _FakeSentrySdk()
+    config = FastApiBindingConfig(
+        sentry_enabled=True,
+        sentry_dsn="https://examplePublicKey@o0.ingest.sentry.io/0",
+    )
+
+    result = capture_sentry_exception_from_config(
+        config=config,
+        sdk_module=fake_sdk,
+        exc=RuntimeError("contains sk-secret"),
+        context={"run_id": "run-001"},
+    )
+
+    assert result.enabled is True
+    assert result.captured is True
+    assert result.reason == SENTRY_CAPTURED_REASON
+    assert result.event_id == "event-001"
+    assert fake_sdk.captured_events[0]["extra"]["run_id"] == "run-001"
