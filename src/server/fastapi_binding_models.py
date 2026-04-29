@@ -117,6 +117,7 @@ EdgeObservationWriter = Callable[[Mapping[str, Any]], Any]
 HttpAccessLogWriter = Callable[[Mapping[str, Any]], Any]
 OtelSpanWriter = Callable[[Mapping[str, Any]], Any]
 EdgeRateLimitRedisClientProvider = Callable[[], Any]
+InternalAdminRouterProvider = Callable[[], Any]
 PublicSharePayloadProvider = Callable[[str], Optional[Mapping[str, Any]]]
 PublicSharePayloadRowsProvider = Callable[[], Sequence[Mapping[str, Any]]]
 PublicSharePayloadWriter = Callable[[Mapping[str, Any]], Mapping[str, Any]]
@@ -292,6 +293,7 @@ class FastApiRouteDependencies:
     http_access_log_writer: Optional[HttpAccessLogWriter] = None
     otel_span_writer: Optional[OtelSpanWriter] = None
     edge_rate_limit_redis_client_provider: Optional[EdgeRateLimitRedisClientProvider] = None
+    gdpr_deletion_router_provider: Optional[InternalAdminRouterProvider] = None
     provider_probe_history_writer: ProviderProbeHistoryWriter = _noop_probe_history_writer
     managed_secret_writer: ManagedSecretWriter = _default_secret_writer
     managed_secret_metadata_reader: Optional[ManagedSecretMetadataReader] = None

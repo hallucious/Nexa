@@ -133,8 +133,24 @@ class FastApiRouteBindings:
             dependencies=self.dependencies,
             session_claims_resolver=self._resolve_session_claims,
         )
+        self._include_internal_admin_routers(app)
         app.include_router(self.build_router())
         return app
+
+    def _include_internal_admin_routers(self, app: FastAPI) -> None:
+        """Mount optional internal/admin routers supplied by dependency wiring.
+
+        These routers are intentionally opt-in. Sensitive operational surfaces,
+        including GDPR deletion execution, must not be exposed by default merely
+        because the public app shell is constructed.
+        """
+
+        provider = getattr(self.dependencies, "gdpr_deletion_router_provider", None)
+        if provider is None:
+            return
+        router = provider()
+        if router is not None:
+            app.include_router(router)
 
     def _resolve_managed_secret_metadata_reader(self):
         client = self.dependencies.aws_secrets_manager_client_provider() if self.dependencies.aws_secrets_manager_client_provider is not None else None
