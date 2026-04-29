@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import datetime, timezone
 from typing import Any, Callable, Mapping
 from urllib.parse import urlparse
+from uuid import uuid4
 
 from src.server.gdpr_deletion_runtime import (
     CATEGORY_C_TTL_DELETABLE,
@@ -91,38 +93,56 @@ class GdprPostgresDeletionAdapter:
 
     def write_audit(self, audit_payload: Mapping[str, Any]) -> dict[str, Any]:
         sanitized = sanitize_observability_payload(dict(audit_payload))
+        audit_event_id = str(sanitized.get("audit_event_id") or "").strip() or f"uda_{uuid4().hex}"
+        recorded_at = str(sanitized.get("recorded_at") or "").strip() or datetime.now(timezone.utc).isoformat()
+        event_type = str(sanitized.get("event_type") or "user_deletion_audit").strip() or "user_deletion_audit"
+        stored_payload = {
+            **sanitized,
+            "audit_event_id": audit_event_id,
+            "recorded_at": recorded_at,
+            "event_type": event_type,
+        }
         _require_sqlalchemy()
         with self.engine.begin() as connection:
             connection.execute(
                 text(
                     f"""
                     INSERT INTO {self.audit_table_name} (
+                        audit_event_id,
                         deletion_request_id,
                         user_ref,
                         requested_by_ref,
                         status,
                         reason,
+                        event_type,
+                        recorded_at,
                         audit_payload
                     ) VALUES (
+                        :audit_event_id,
                         :deletion_request_id,
                         :user_ref,
                         :requested_by_ref,
                         :status,
                         :reason,
+                        :event_type,
+                        :recorded_at,
                         :audit_payload
                     )
                     """
                 ),
                 {
+                    "audit_event_id": audit_event_id,
                     "deletion_request_id": str(sanitized.get("deletion_request_id") or ""),
                     "user_ref": str(sanitized.get("user_ref") or ""),
-                    "requested_by_ref": str(sanitized.get("requested_by_ref") or ""),
+                    "requested_by_ref": str(sanitized.get("requested_by_ref") or sanitized.get("actor_ref") or ""),
                     "status": str(sanitized.get("status") or ""),
                     "reason": str(sanitized.get("reason") or ""),
-                    "audit_payload": sanitized,
+                    "event_type": event_type,
+                    "recorded_at": recorded_at,
+                    "audit_payload": stored_payload,
                 },
             )
-        return dict(sanitized)
+        return dict(stored_payload)
 
 
 @dataclass(frozen=True)
