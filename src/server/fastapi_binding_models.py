@@ -40,6 +40,10 @@ class FastApiBindingConfig:
     sentry_environment: str = "local"
     sentry_release: str | None = None
     sentry_traces_sample_rate: float = 0.0
+    otel_enabled: bool = False
+    otel_service_name: str = "nexa-server"
+    otel_environment: str = "local"
+    otel_exporter_endpoint: str | None = None
 
     def __post_init__(self) -> None:
         if not str(self.title).strip():
@@ -62,6 +66,10 @@ class FastApiBindingConfig:
             raise ValueError("FastApiBindingConfig.sentry_environment must be non-empty")
         if not 0 <= float(self.sentry_traces_sample_rate) <= 1:
             raise ValueError("FastApiBindingConfig.sentry_traces_sample_rate must be between 0 and 1")
+        if not str(self.otel_service_name or "").strip():
+            raise ValueError("FastApiBindingConfig.otel_service_name must be non-empty")
+        if not str(self.otel_environment or "").strip():
+            raise ValueError("FastApiBindingConfig.otel_environment must be non-empty")
 
 
 SessionClaimsResolver = Callable[[Request], Optional[Mapping[str, Any]]]
@@ -107,6 +115,7 @@ IdentifierFactory = Callable[[], str]
 NowIsoProvider = Callable[[], str]
 EdgeObservationWriter = Callable[[Mapping[str, Any]], Any]
 HttpAccessLogWriter = Callable[[Mapping[str, Any]], Any]
+OtelSpanWriter = Callable[[Mapping[str, Any]], Any]
 EdgeRateLimitRedisClientProvider = Callable[[], Any]
 PublicSharePayloadProvider = Callable[[str], Optional[Mapping[str, Any]]]
 PublicSharePayloadRowsProvider = Callable[[], Sequence[Mapping[str, Any]]]
@@ -281,6 +290,7 @@ class FastApiRouteDependencies:
     run_record_writer: RunRecordWriter = _noop_run_record_writer
     edge_observation_writer: EdgeObservationWriter = _noop_edge_observation_writer
     http_access_log_writer: Optional[HttpAccessLogWriter] = None
+    otel_span_writer: Optional[OtelSpanWriter] = None
     edge_rate_limit_redis_client_provider: Optional[EdgeRateLimitRedisClientProvider] = None
     provider_probe_history_writer: ProviderProbeHistoryWriter = _noop_probe_history_writer
     managed_secret_writer: ManagedSecretWriter = _default_secret_writer

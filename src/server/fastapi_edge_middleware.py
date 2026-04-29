@@ -25,9 +25,12 @@ from src.server.edge_security_runtime import (
 )
 from src.server.fastapi_app_bootstrap import capture_fastapi_app_exception
 from src.server.fastapi_binding_models import FastApiBindingConfig, FastApiRouteDependencies
+from src.server.otel_observability_runtime import build_otel_exception_event, build_otel_http_server_attributes
 from src.server.safe_http_logging_runtime import emit_http_access_log
 
 SessionClaimsResolver = Callable[[Request], Mapping[str, Any] | None]
+
+OTEL_HTTP_SERVER_EVENT_TYPE = "otel.http.server"
 
 
 def _resolve_redis_client(dependencies: FastApiRouteDependencies) -> Any | None:
@@ -71,6 +74,63 @@ def _emit_http_access_log(
         route_template=_route_template(request),
         extra=extra,
     )
+
+
+def _emit_otel_http_server_span(
+    *,
+    dependencies: FastApiRouteDependencies,
+    config: FastApiBindingConfig,
+    request: Request,
+    request_id: str,
+    status_code: int,
+    started_at: float,
+    session_claims: Mapping[str, Any] | None = None,
+    extra: Mapping[str, Any] | None = None,
+    exc: BaseException | None = None,
+) -> None:
+    """Emit a safe OTel HTTP server span projection.
+
+    This function is SDK-independent. It emits only scrubbed attributes through
+    an optional testable writer, so request/response bodies and credentials do
+    not reach the projection boundary.
+    """
+
+    if not bool(getattr(config, "otel_enabled", False)):
+        return
+    writer = getattr(dependencies, "otel_span_writer", None)
+    if writer is None:
+        return
+    duration_ms = max(0, int((time.perf_counter() - started_at) * 1000))
+    span_extra: dict[str, Any] = {
+        "nexa.edge_outcome": str((extra or {}).get("edge_outcome") or "completed"),
+        "nexa.duration_ms": duration_ms,
+        "nexa.otel_service_name": str(getattr(config, "otel_service_name", "nexa-server") or "nexa-server"),
+        "nexa.otel_environment": str(getattr(config, "otel_environment", "local") or "local"),
+    }
+    if isinstance(extra, Mapping):
+        for key, value in extra.items():
+            span_extra.setdefault(str(key), value)
+    attributes = build_otel_http_server_attributes(
+        method=request.method,
+        path=request.url.path,
+        status_code=status_code,
+        request_id=request_id,
+        headers=request.headers,
+        query_params=dict(request.query_params),
+        session_claims=session_claims,
+        extra=span_extra,
+    )
+    event: dict[str, Any] = {
+        "event_type": OTEL_HTTP_SERVER_EVENT_TYPE,
+        "name": "http.server",
+        "attributes": attributes,
+    }
+    if exc is not None:
+        event["events"] = [build_otel_exception_event(exc=exc, attributes=attributes)]
+    try:
+        writer(event)
+    except Exception:
+        return
 
 
 def register_fastapi_edge_middleware(
@@ -130,13 +190,24 @@ def register_fastapi_edge_middleware(
                     dependencies.edge_observation_writer,
                     edge_request_completed_event(request_context=request_context, status_code=response.status_code),
                 )
+            extra = {"edge_outcome": "cors_preflight"}
             _emit_http_access_log(
                 dependencies=dependencies,
                 request=request,
                 request_id=request_id,
                 status_code=response.status_code,
                 started_at=started_at,
-                extra={"edge_outcome": "cors_preflight"},
+                extra=extra,
+            )
+            _emit_otel_http_server_span(
+                dependencies=dependencies,
+                config=config,
+                request=request,
+                request_id=request_id,
+                status_code=response.status_code,
+                started_at=started_at,
+                session_claims=session_claims_map,
+                extra=extra,
             )
             return response
 
@@ -167,16 +238,28 @@ def register_fastapi_edge_middleware(
                         dependencies.edge_observation_writer,
                         edge_request_completed_event(request_context=request_context, status_code=response.status_code),
                     )
+                extra = {"edge_outcome": "rate_limited"}
                 _emit_http_access_log(
                     dependencies=dependencies,
                     request=request,
                     request_id=request_id,
                     status_code=response.status_code,
                     started_at=started_at,
-                    extra={"edge_outcome": "rate_limited"},
+                    extra=extra,
+                )
+                _emit_otel_http_server_span(
+                    dependencies=dependencies,
+                    config=config,
+                    request=request,
+                    request_id=request_id,
+                    status_code=response.status_code,
+                    started_at=started_at,
+                    session_claims=session_claims_map,
+                    extra=extra,
                 )
                 return response
 
+        direct_projection_emitted = False
         try:
             response = await call_next(request)
         except Exception as exc:
@@ -202,6 +285,27 @@ def register_fastapi_edge_middleware(
                     content=edge_exception_payload(request_id=request_id),
                     headers={"x-nexa-request-id": request_id},
                 )
+                extra = {"edge_outcome": "exception"}
+                _emit_http_access_log(
+                    dependencies=dependencies,
+                    request=request,
+                    request_id=request_id,
+                    status_code=response.status_code,
+                    started_at=started_at,
+                    extra=extra,
+                )
+                _emit_otel_http_server_span(
+                    dependencies=dependencies,
+                    config=config,
+                    request=request,
+                    request_id=request_id,
+                    status_code=response.status_code,
+                    started_at=started_at,
+                    session_claims=session_claims_map,
+                    extra=extra,
+                    exc=exc,
+                )
+                direct_projection_emitted = True
             else:
                 raise
         response.headers["x-nexa-request-id"] = request_id
@@ -214,15 +318,27 @@ def register_fastapi_edge_middleware(
                 dependencies.edge_observation_writer,
                 edge_request_completed_event(request_context=request_context, status_code=response.status_code),
             )
-        _emit_http_access_log(
-            dependencies=dependencies,
-            request=request,
-            request_id=request_id,
-            status_code=response.status_code,
-            started_at=started_at,
-            extra={"edge_outcome": "completed"},
-        )
+        if not direct_projection_emitted:
+            extra = {"edge_outcome": "completed"}
+            _emit_http_access_log(
+                dependencies=dependencies,
+                request=request,
+                request_id=request_id,
+                status_code=response.status_code,
+                started_at=started_at,
+                extra=extra,
+            )
+            _emit_otel_http_server_span(
+                dependencies=dependencies,
+                config=config,
+                request=request,
+                request_id=request_id,
+                status_code=response.status_code,
+                started_at=started_at,
+                session_claims=session_claims_map,
+                extra=extra,
+            )
         return response
 
 
-__all__ = ["register_fastapi_edge_middleware"]
+__all__ = ["OTEL_HTTP_SERVER_EVENT_TYPE", "register_fastapi_edge_middleware"]
