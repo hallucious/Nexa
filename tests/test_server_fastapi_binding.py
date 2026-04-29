@@ -3964,3 +3964,77 @@ def test_fastapi_binding_workspace_result_history_renders_contract_review_struct
     assert 'data-question-id="question-1"' in page_response.text
     assert 'id="ask_pre_signature_question_1"' in page_response.text
     assert 'return_use=contract_review_question' in page_response.text
+
+
+def test_fastapi_binding_contract_review_vertical_slice_e2e_smoke_path() -> None:
+    contract_review_value = json.dumps(
+        {
+            "use_case": "contract_review",
+            "template_id": "contract_review_freelancer_v1",
+            "document_reference": {"upload_id": "upload-001", "extraction_id": "extract-001"},
+            "clauses": [
+                {
+                    "clause_id": "payment",
+                    "title": "Payment terms",
+                    "risk_level": "medium",
+                    "plain_language_explanation": "Payment timing is not explicit.",
+                    "source_reference": {"start": 120, "end": 180, "label": "Section 3"},
+                }
+            ],
+            "pre_signature_questions": ["When is payment due?"],
+        },
+        sort_keys=True,
+    )
+    client = _make_client(
+        workspace_result_rows={
+            'run-002': {
+                'run_id': 'run-002',
+                'workspace_id': 'ws-001',
+                'result_state': 'ready_success',
+                'final_status': 'completed',
+                'result_summary': 'Success.',
+                'updated_at': '2026-04-11T12:01:05+00:00',
+                'final_output': {
+                    'output_key': 'contract_review_result',
+                    'value_preview': contract_review_value,
+                    'value_type': 'contract_review',
+                },
+            }
+        }
+    )
+
+    dashboard = client.get('/app/workspaces?app_language=en', headers=_session_headers())
+    assert dashboard.status_code == 200
+    assert 'use_case=contract_review' in dashboard.text
+
+    upload = client.get('/app/workspaces/ws-001/upload?app_language=en&use_case=contract_review', headers=_session_headers())
+    assert upload.status_code == 200
+    assert 'contract-review-upload-readiness' in upload.text
+    assert 'data-required-upload-state="safe"' in upload.text
+
+    run = client.get(
+        '/app/workspaces/ws-001/run?app_language=en&use_case=contract_review&upload_id=upload-001&upload_status=safe&extraction_id=extract-001',
+        headers=_session_headers(),
+    )
+    assert run.status_code == 200
+    assert 'contract-review-run-input-handoff' in run.text
+    assert 'data-ready-for-run="true"' in run.text
+    assert 'web_contract_review_slice' in run.text
+
+    result_api = client.get('/api/workspaces/ws-001/result-history?run_id=run-002', headers=_session_headers())
+    assert result_api.status_code == 200
+    result_payload = result_api.json()
+    selected = result_payload['selected_result']
+    assert selected['contract_review_result']['render_kind'] == 'contract_review_structured'
+    assert selected['contract_review_result']['document_reference']['upload_id'] == 'upload-001'
+    assert selected['contract_review_result']['clauses'][0]['source_reference']['mode'] == 'character_offsets'
+
+    result_page = client.get('/app/workspaces/ws-001/results?run_id=run-002', headers=_session_headers())
+    assert result_page.status_code == 200
+    assert 'contract-review-structured-result' in result_page.text
+    assert 'contract-review-next-actions' in result_page.text
+    assert 'id="copy_contract_review_result"' in result_page.text
+    assert 'id="continue_from_contract_review_result"' in result_page.text
+    assert 'return_use=contract_review_result' in result_page.text
+    assert 'id="ask_pre_signature_question_1"' in result_page.text
+    assert 'return_use=contract_review_question' in result_page.text

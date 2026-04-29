@@ -172,3 +172,58 @@ def test_contract_review_next_action_panel_preserves_copy_continue_and_question_
     assert panel["question_actions"][0]["action_kind"] == "designer_followup"
     assert "return_use=contract_review_question" in panel["question_actions"][0]["href"]
     assert "When is payment due?" in panel["question_actions"][0]["prompt_text"]
+
+
+def test_contract_review_vertical_slice_smoke_covers_upload_handoff_result_and_next_actions() -> None:
+    dashboard_html = render_web_workspace_dashboard_html(
+        workspace_rows=[{"workspace_id": "ws-001", "title": "Client NDA"}],
+        app_language="en",
+    )
+    upload_html = render_web_upload_entry_html(
+        workspace_id="ws-001",
+        app_language="en",
+    )
+    run_html = render_web_run_entry_html(
+        workspace_id="ws-001",
+        app_language="en",
+        use_case="contract_review",
+        upload_id="upload-001",
+        upload_status="safe",
+        extraction_id="extract-001",
+    )
+    structured = contract_review_structured_result_payload(
+        output_key="contract_review_result",
+        value_type="contract_review",
+        value_preview=(
+            '{'
+            '"use_case":"contract_review",'
+            '"template_id":"contract_review_freelancer_v1",'
+            '"document_reference":{"upload_id":"upload-001","extraction_id":"extract-001"},'
+            '"clauses":[{"clause_id":"payment","title":"Payment terms","risk_level":"medium",'
+            '"plain_language_explanation":"Payment timing is not explicit.",'
+            '"source_reference":{"start":120,"end":180,"label":"Section 3"}}],'
+            '"pre_signature_questions":["When is payment due?"]'
+            '}'
+        ),
+    )
+    next_actions = contract_review_next_action_panel_payload(
+        workspace_id="ws-001",
+        run_id="run-002",
+        output_ref="contract_review_result",
+        contract_review_result=structured,
+        app_language="en",
+    )
+
+    assert "use_case=contract_review" in dashboard_html
+    assert "contract-review-upload-readiness" in upload_html
+    assert 'data-required-upload-state="safe"' in upload_html
+    assert "contract-review-run-input-handoff" in run_html
+    assert 'data-ready-for-run="true"' in run_html
+    assert structured is not None
+    assert structured["render_kind"] == "contract_review_structured"
+    assert structured["document_reference"] == {"upload_id": "upload-001", "extraction_id": "extract-001"}
+    assert structured["clauses"][0]["source_reference"]["mode"] == "character_offsets"
+    assert next_actions is not None
+    assert next_actions["actions"][0]["action_id"] == "copy_contract_review_result"
+    assert next_actions["actions"][1]["action_id"] == "continue_from_contract_review_result"
+    assert next_actions["question_actions"][0]["action_id"] == "ask_pre_signature_question_1"
