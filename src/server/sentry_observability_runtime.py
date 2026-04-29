@@ -16,7 +16,7 @@ SENTRY_CAPTURE_FAILED_REASON = "sentry_capture_failed"
 SENTRY_NOT_INITIALIZED_REASON = "sentry_not_initialized"
 SENTRY_APP_STATE_KEY = "nexa_sentry_observability"
 
-REQUEST_BODY_KEYS = {"data", "body", "raw_body", "json", "form", "files"}
+REQUEST_BODY_KEYS = {"data", "body", "raw_body", "request_body", "json", "form", "files"}
 REQUEST_COOKIE_KEYS = {"cookies", "cookie"}
 USER_PII_KEYS = {"email", "ip_address", "username", "name", "id"}
 
@@ -93,6 +93,11 @@ def _scrub_request_mapping(request: Mapping[str, Any]) -> dict[str, Any]:
     return request_dict
 
 
+def _redact_sensitive_key_value(key: str, value: Any) -> Any:
+    redacted = redact_mapping({key: value})
+    return redacted.get(key)
+
+
 def _scrub_mapping(mapping: Mapping[str, Any]) -> dict[str, Any]:
     scrubbed: dict[str, Any] = {}
     for key, value in mapping.items():
@@ -100,17 +105,22 @@ def _scrub_mapping(mapping: Mapping[str, Any]) -> dict[str, Any]:
         normalized = key_text.strip().lower().replace("-", "_")
         if normalized == "request" and isinstance(value, Mapping):
             scrubbed[key_text] = _scrub_request_mapping(value)
+        elif normalized == "session" and isinstance(value, Mapping):
+            # Preserve the session object shape for diagnostics, but redact its
+            # sensitive children such as session_token instead of collapsing the
+            # whole container into a scalar.
+            scrubbed[key_text] = _scrub_mapping(value)
         elif normalized in REQUEST_BODY_KEYS or normalized in REQUEST_COOKIE_KEYS:
             scrubbed[key_text] = REDACTED_VALUE
         elif normalized in USER_PII_KEYS:
             scrubbed[key_text] = REDACTED_VALUE
         elif isinstance(value, Mapping):
-            scrubbed[key_text] = _scrub_mapping(value)
+            scrubbed[key_text] = _redact_sensitive_key_value(key_text, _scrub_mapping(value))
         elif isinstance(value, (list, tuple)):
-            scrubbed[key_text] = [_scrub_collection(item) for item in value]
+            scrubbed[key_text] = _redact_sensitive_key_value(key_text, [_scrub_collection(item) for item in value])
         else:
-            scrubbed[key_text] = _redact_text(value)
-    return redact_mapping(scrubbed)
+            scrubbed[key_text] = _redact_sensitive_key_value(key_text, _redact_text(value))
+    return scrubbed
 
 
 def scrub_sentry_event(event: Mapping[str, Any] | None, hint: Mapping[str, Any] | None = None) -> dict[str, Any] | None:
@@ -279,6 +289,43 @@ def read_sentry_observability_app_state(app: Any) -> dict[str, Any]:
     return dict(payload) if isinstance(payload, Mapping) else {}
 
 
+def build_sentry_request_context(
+    *,
+    method: str | None = None,
+    path: str | None = None,
+    headers: Mapping[str, Any] | None = None,
+    query_params: Mapping[str, Any] | None = None,
+    request_id: str | None = None,
+    session_claims: Mapping[str, Any] | None = None,
+    status_code: int | None = None,
+    extra: Mapping[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Build a Sentry-safe HTTP request context before exception capture.
+
+    This adapter gives FastAPI middleware and worker/API boundaries one common
+    request-context shape without storing bodies, cookies, authorization secrets,
+    query strings, or raw identity claims.
+    """
+
+    context: dict[str, Any] = {
+        "request": {
+            "method": str(method or "").upper(),
+            "path": str(path or ""),
+            "headers": redact_headers(headers if isinstance(headers, Mapping) else {}),
+            "query_params": redact_mapping(query_params if isinstance(query_params, Mapping) else {}),
+        }
+    }
+    if request_id:
+        context["request_id"] = str(request_id)
+    if status_code is not None:
+        context["status_code"] = int(status_code)
+    if isinstance(session_claims, Mapping):
+        context["session"] = redact_mapping(session_claims)
+    if isinstance(extra, Mapping):
+        context.update(_scrub_mapping(extra))
+    return _scrub_mapping(context)
+
+
 def build_sentry_exception_event(*, exc: BaseException, context: Mapping[str, Any] | None = None) -> dict[str, Any] | None:
     """Build the exact scrubbed event used by exception capture.
 
@@ -402,6 +449,7 @@ __all__ = [
     "SentryCaptureResult",
     "SentryInitializationResult",
     "build_sentry_exception_event",
+    "build_sentry_request_context",
     "capture_sentry_exception",
     "capture_sentry_exception_for_app",
     "capture_sentry_exception_from_config",
