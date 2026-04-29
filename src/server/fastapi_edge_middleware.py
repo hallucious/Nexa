@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import time
 from typing import Any, Callable, Mapping
 from uuid import uuid4
 
@@ -24,6 +25,7 @@ from src.server.edge_security_runtime import (
 )
 from src.server.fastapi_app_bootstrap import capture_fastapi_app_exception
 from src.server.fastapi_binding_models import FastApiBindingConfig, FastApiRouteDependencies
+from src.server.safe_http_logging_runtime import emit_http_access_log
 
 SessionClaimsResolver = Callable[[Request], Mapping[str, Any] | None]
 
@@ -36,6 +38,39 @@ def _resolve_redis_client(dependencies: FastApiRouteDependencies) -> Any | None:
         return provider()
     except Exception:
         return None
+
+
+def _route_template(request: Request) -> str | None:
+    scope = getattr(request, "scope", {})
+    route = scope.get("route") if isinstance(scope, Mapping) else None
+    template = getattr(route, "path", None)
+    text = str(template or "").strip()
+    return text or None
+
+
+def _emit_http_access_log(
+    *,
+    dependencies: FastApiRouteDependencies,
+    request: Request,
+    request_id: str,
+    status_code: int,
+    started_at: float,
+    extra: Mapping[str, Any] | None = None,
+) -> None:
+    writer = getattr(dependencies, "http_access_log_writer", None)
+    if writer is None:
+        return
+    duration_ms = max(0, int((time.perf_counter() - started_at) * 1000))
+    emit_http_access_log(
+        writer,
+        method=request.method,
+        path=request.url.path,
+        status_code=status_code,
+        duration_ms=duration_ms,
+        request_id=request_id,
+        route_template=_route_template(request),
+        extra=extra,
+    )
 
 
 def register_fastapi_edge_middleware(
@@ -64,6 +99,7 @@ def register_fastapi_edge_middleware(
 
     @app.middleware("http")
     async def edge_security_middleware(request: Request, call_next):
+        started_at = time.perf_counter()
         request_id = str(request.headers.get("x-nexa-request-id") or request.headers.get("x-request-id") or uuid4().hex)
         session_claims = session_claims_resolver(request)
         session_claims_map = dict(session_claims) if isinstance(session_claims, Mapping) else None
@@ -94,6 +130,14 @@ def register_fastapi_edge_middleware(
                     dependencies.edge_observation_writer,
                     edge_request_completed_event(request_context=request_context, status_code=response.status_code),
                 )
+            _emit_http_access_log(
+                dependencies=dependencies,
+                request=request,
+                request_id=request_id,
+                status_code=response.status_code,
+                started_at=started_at,
+                extra={"edge_outcome": "cors_preflight"},
+            )
             return response
 
         if config.rate_limit_enabled and path_is_rate_limited(
@@ -123,6 +167,14 @@ def register_fastapi_edge_middleware(
                         dependencies.edge_observation_writer,
                         edge_request_completed_event(request_context=request_context, status_code=response.status_code),
                     )
+                _emit_http_access_log(
+                    dependencies=dependencies,
+                    request=request,
+                    request_id=request_id,
+                    status_code=response.status_code,
+                    started_at=started_at,
+                    extra={"edge_outcome": "rate_limited"},
+                )
                 return response
 
         try:
@@ -162,6 +214,14 @@ def register_fastapi_edge_middleware(
                 dependencies.edge_observation_writer,
                 edge_request_completed_event(request_context=request_context, status_code=response.status_code),
             )
+        _emit_http_access_log(
+            dependencies=dependencies,
+            request=request,
+            request_id=request_id,
+            status_code=response.status_code,
+            started_at=started_at,
+            extra={"edge_outcome": "completed"},
+        )
         return response
 
 

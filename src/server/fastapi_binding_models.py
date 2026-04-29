@@ -106,6 +106,7 @@ EngineLaunchDecider = Callable[..., EngineRunLaunchResponse]
 IdentifierFactory = Callable[[], str]
 NowIsoProvider = Callable[[], str]
 EdgeObservationWriter = Callable[[Mapping[str, Any]], Any]
+HttpAccessLogWriter = Callable[[Mapping[str, Any]], Any]
 EdgeRateLimitRedisClientProvider = Callable[[], Any]
 PublicSharePayloadProvider = Callable[[str], Optional[Mapping[str, Any]]]
 PublicSharePayloadRowsProvider = Callable[[], Sequence[Mapping[str, Any]]]
@@ -279,6 +280,7 @@ class FastApiRouteDependencies:
     feedback_writer: FeedbackWriter = _noop_feedback_writer
     run_record_writer: RunRecordWriter = _noop_run_record_writer
     edge_observation_writer: EdgeObservationWriter = _noop_edge_observation_writer
+    http_access_log_writer: Optional[HttpAccessLogWriter] = None
     edge_rate_limit_redis_client_provider: Optional[EdgeRateLimitRedisClientProvider] = None
     provider_probe_history_writer: ProviderProbeHistoryWriter = _noop_probe_history_writer
     managed_secret_writer: ManagedSecretWriter = _default_secret_writer
