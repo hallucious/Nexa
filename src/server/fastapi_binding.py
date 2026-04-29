@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import json
-from uuid import uuid4
 from urllib.parse import parse_qsl, quote
 from typing import Any, Mapping, Optional
 
@@ -13,23 +12,8 @@ from src.server.aws_secrets_manager_binding import AwsSecretsManagerSecretAuthor
 from src.server.aws_secrets_manager_models import AwsSecretsManagerBindingConfig
 from src.server.framework_binding_models import FrameworkInboundRequest, FrameworkOutboundResponse
 from src.server.fastapi_binding_models import FastApiBindingConfig, FastApiRouteDependencies
-from src.server.fastapi_app_bootstrap import capture_fastapi_app_exception, install_fastapi_app_observability_bootstrap
-from src.server.edge_rate_limit_runtime import build_edge_rate_limiter
-from src.server.edge_security_runtime import (
-    apply_security_headers,
-    cors_headers,
-    is_cors_preflight,
-    path_is_rate_limited,
-    rate_limit_identity,
-    rate_limited_payload,
-)
-from src.server.edge_observability_runtime import (
-    edge_exception_event,
-    edge_exception_payload,
-    edge_request_completed_event,
-    emit_edge_observation,
-    request_observation_context,
-)
+from src.server.fastapi_app_bootstrap import install_fastapi_app_observability_bootstrap
+from src.server.fastapi_edge_middleware import register_fastapi_edge_middleware
 from src.server.workspace_shell_runtime import render_workspace_shell_runtime_html
 from src.server.circuit_library_runtime import render_circuit_library_runtime_html
 from src.server.result_history_runtime import render_workspace_result_history_html
@@ -3303,129 +3287,14 @@ class FastApiRouteBindings:
             self.config,
             session_claims_resolver=self._resolve_session_claims,
         )
-        rate_limiter = build_edge_rate_limiter(
-            backend=self.config.rate_limit_backend,
-            requests_per_window=self.config.rate_limit_requests_per_window,
-            window_seconds=self.config.rate_limit_window_seconds,
-            redis_client=self._resolve_edge_rate_limit_redis_client(),
-            redis_key_prefix=self.config.rate_limit_redis_key_prefix,
-            redis_fail_open=self.config.rate_limit_redis_fail_open,
+        register_fastapi_edge_middleware(
+            app=app,
+            config=self.config,
+            dependencies=self.dependencies,
+            session_claims_resolver=self._resolve_session_claims,
         )
-
-        @app.middleware("http")
-        async def edge_security_middleware(request: Request, call_next):
-            request_id = str(request.headers.get("x-nexa-request-id") or request.headers.get("x-request-id") or uuid4().hex)
-            session_claims = self._resolve_session_claims(request)
-            request_context = request_observation_context(
-                method=request.method,
-                path=request.url.path,
-                headers=request.headers,
-                query_params=dict(request.query_params),
-                session_claims=session_claims,
-                request_id=request_id,
-            )
-            cors_header_values = cors_headers(
-                origin=request.headers.get("origin"),
-                allowed_origins=self.config.cors_allowed_origins,
-                allowed_methods=self.config.cors_allowed_methods,
-                allowed_headers=self.config.cors_allowed_headers,
-                max_age_seconds=self.config.cors_max_age_seconds,
-            )
-            if is_cors_preflight(method=request.method, headers=request.headers):
-                response = Response(status_code=204 if cors_header_values else 403)
-                response.headers["x-nexa-request-id"] = request_id
-                for key, value in cors_header_values.items():
-                    response.headers[key] = value
-                if self.config.security_headers_enabled:
-                    apply_security_headers(response.headers)
-                if self.config.edge_observability_enabled:
-                    emit_edge_observation(
-                        self.dependencies.edge_observation_writer,
-                        edge_request_completed_event(request_context=request_context, status_code=response.status_code),
-                    )
-                return response
-
-            if self.config.rate_limit_enabled and path_is_rate_limited(
-                request.url.path,
-                self.config.rate_limit_path_prefixes,
-            ):
-                client_host = request.client.host if request.client is not None else None
-                rate_limit_key = rate_limit_identity(
-                    method=request.method,
-                    path=request.url.path,
-                    client_host=client_host,
-                    session_claims=session_claims,
-                )
-                allowed, retry_after = rate_limiter.record(rate_limit_key)
-                if not allowed:
-                    response = JSONResponse(
-                        status_code=429,
-                        content=rate_limited_payload(),
-                        headers={"retry-after": str(retry_after), "x-nexa-request-id": request_id},
-                    )
-                    for key, value in cors_header_values.items():
-                        response.headers[key] = value
-                    if self.config.security_headers_enabled:
-                        apply_security_headers(response.headers)
-                    if self.config.edge_observability_enabled:
-                        emit_edge_observation(
-                            self.dependencies.edge_observation_writer,
-                            edge_request_completed_event(request_context=request_context, status_code=response.status_code),
-                        )
-                    return response
-
-            try:
-                response = await call_next(request)
-            except Exception as exc:
-                if self.config.edge_observability_enabled and self.config.edge_exception_capture_enabled:
-                    capture_fastapi_app_exception(
-                        app=app,
-                        config=self.config,
-                        exc=exc,
-                        method=request.method,
-                        path=request.url.path,
-                        headers=request.headers,
-                        query_params=dict(request.query_params),
-                        request_id=request_id,
-                        session_claims=session_claims,
-                        status_code=500,
-                    )
-                    emit_edge_observation(
-                        self.dependencies.edge_observation_writer,
-                        edge_exception_event(request_context=request_context, exc=exc),
-                    )
-                    response = JSONResponse(
-                        status_code=500,
-                        content=edge_exception_payload(request_id=request_id),
-                        headers={"x-nexa-request-id": request_id},
-                    )
-                else:
-                    raise
-            response.headers["x-nexa-request-id"] = request_id
-            for key, value in cors_header_values.items():
-                response.headers[key] = value
-            if self.config.security_headers_enabled:
-                apply_security_headers(response.headers)
-            if self.config.edge_observability_enabled:
-                emit_edge_observation(
-                    self.dependencies.edge_observation_writer,
-                    edge_request_completed_event(request_context=request_context, status_code=response.status_code),
-                )
-            return response
-
         app.include_router(self.build_router())
         return app
-
-    def _resolve_edge_rate_limit_redis_client(self):
-        provider = self.dependencies.edge_rate_limit_redis_client_provider
-        if provider is None:
-            return None
-        try:
-            return provider()
-        except Exception:
-            # Rate-limit backend construction must not break app bootstrap.
-            # Redis failures are handled by the Redis limiter policy itself.
-            return None
 
     def _resolve_managed_secret_metadata_reader(self):
         client = self.dependencies.aws_secrets_manager_client_provider() if self.dependencies.aws_secrets_manager_client_provider is not None else None
