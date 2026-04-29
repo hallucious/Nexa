@@ -3,6 +3,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any, Callable, Mapping
 
+from src.server.observability_payload_guard import sanitize_observability_payload
+
 
 EDGE_EXCEPTION_REASON = "edge_exception_captured"
 REDACTED_VALUE = "<redacted>"
@@ -173,7 +175,7 @@ def emit_edge_observation(writer: EdgeObservationWriter | None, event: Mapping[s
     if writer is None:
         return
     try:
-        writer(dict(event))
+        writer(sanitize_observability_payload(dict(event)))
     except Exception:
         # Observability must never become the user-visible failure path.
         return
