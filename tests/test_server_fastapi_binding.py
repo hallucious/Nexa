@@ -222,7 +222,7 @@ def test_fastapi_binding_matches_framework_and_http_route_definitions() -> None:
     assert fastapi_routes == framework_routes == http_surface_routes
 
 
-def _make_client(*, onboarding_store: InMemoryOnboardingStateStore | None = None, feedback_store: InMemoryFeedbackStore | None = None, artifact_source=None, public_share_payload_provider=None, public_share_payload_rows_provider=None, public_share_payload_writer=None, public_share_payload_deleter=None, public_share_action_report_rows_provider=None, public_share_action_report_writer=None, saved_public_share_rows_provider=None, saved_public_share_writer=None, saved_public_share_deleter=None, workspace_run_rows=None, workspace_result_rows=None, workspace_provider_binding_rows=None, workspace_provider_probe_rows=None, recent_managed_secret_rows=None, fastapi_config: FastApiBindingConfig | None = None) -> TestClient:
+def _make_client(*, onboarding_store: InMemoryOnboardingStateStore | None = None, feedback_store: InMemoryFeedbackStore | None = None, artifact_source=None, public_share_payload_provider=None, public_share_payload_rows_provider=None, public_share_payload_writer=None, public_share_payload_deleter=None, public_share_action_report_rows_provider=None, public_share_action_report_writer=None, saved_public_share_rows_provider=None, saved_public_share_writer=None, saved_public_share_deleter=None, workspace_run_rows=None, workspace_result_rows=None, workspace_provider_binding_rows=None, workspace_provider_probe_rows=None, recent_managed_secret_rows=None, fastapi_config: FastApiBindingConfig | None = None, edge_observation_writer=None) -> TestClient:
     artifact_rows = {
         "run-001": [
             {
@@ -464,6 +464,7 @@ def _make_client(*, onboarding_store: InMemoryOnboardingStateStore | None = None
         provider_probe_runner=_probe_runner,
         probe_event_id_factory=lambda: 'probe-new',
         now_iso_provider=lambda: "2026-04-11T12:09:00+00:00",
+        edge_observation_writer=edge_observation_writer or (lambda event: dict(event)),
     )
     deps = bind_probe_history_store(dependencies=deps, store=probe_store)
     if onboarding_store is not None:
@@ -4114,3 +4115,71 @@ def test_fastapi_binding_rate_limits_sensitive_run_endpoint_without_echoing_payl
     assert "retry-after" in third.headers
     assert "sensitive contract text" not in third.text
     assert third.headers["x-content-type-options"] == "nosniff"
+
+
+def test_fastapi_binding_emits_privacy_safe_edge_request_observation() -> None:
+    events: list[dict] = []
+    client = _make_client(edge_observation_writer=events.append)
+
+    response = client.get(
+        "/app/workspaces?token=sk-query-secret&safe=value",
+        headers={
+            **_session_headers(),
+            "authorization": "Bearer sk-header-secret",
+            "cookie": "session=secret-cookie",
+            "x-nexa-request-id": "req-observe-001",
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.headers["x-nexa-request-id"] == "req-observe-001"
+    completed = [event for event in events if event.get("event_type") == "edge.http_request_completed"]
+    assert completed
+    event = completed[-1]
+    assert event["status_code"] == 200
+    assert event["request"]["method"] == "GET"
+    assert event["request"]["path"] == "/app/workspaces"
+    event_text = json.dumps(event, sort_keys=True)
+    assert "sk-query-secret" not in event_text
+    assert "sk-header-secret" not in event_text
+    assert "secret-cookie" not in event_text
+    assert event["request"]["query_params"]["token"] == "<redacted>"
+    assert event["request"]["headers"]["authorization"] == "<redacted>"
+    assert event["request"]["headers"]["cookie"] == "<redacted>"
+
+
+def test_fastapi_binding_captures_edge_exception_without_leaking_sensitive_data() -> None:
+    events: list[dict] = []
+    client = _make_client(edge_observation_writer=events.append)
+
+    @client.app.get("/test/edge-observability/boom")
+    async def _boom():
+        raise RuntimeError("provider secret sk-runtime-secret should not leak")
+
+    response = client.get(
+        "/test/edge-observability/boom?api_key=sk-query-secret",
+        headers={
+            **_session_headers(),
+            "authorization": "Bearer sk-header-secret",
+            "x-nexa-request-id": "req-exception-001",
+        },
+    )
+
+    assert response.status_code == 500
+    payload = response.json()
+    assert payload == {
+        "status": "error",
+        "reason": "edge_exception_captured",
+        "request_id": "req-exception-001",
+    }
+    exception_events = [event for event in events if event.get("event_type") == "edge.http_exception_captured"]
+    assert exception_events
+    event = exception_events[-1]
+    assert event["error_type"] == "RuntimeError"
+    assert event["reason"] == "edge_exception_captured"
+    event_text = json.dumps(event, sort_keys=True)
+    assert "sk-runtime-secret" not in event_text
+    assert "sk-query-secret" not in event_text
+    assert "sk-header-secret" not in event_text
+    assert event["request"]["query_params"]["api_key"] == "<redacted>"
+    assert event["request"]["headers"]["authorization"] == "<redacted>"

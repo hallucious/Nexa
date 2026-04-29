@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from uuid import uuid4
 from urllib.parse import parse_qsl, quote
 from typing import Any, Mapping, Optional
 
@@ -20,6 +21,13 @@ from src.server.edge_security_runtime import (
     path_is_rate_limited,
     rate_limit_identity,
     rate_limited_payload,
+)
+from src.server.edge_observability_runtime import (
+    edge_exception_event,
+    edge_exception_payload,
+    edge_request_completed_event,
+    emit_edge_observation,
+    request_observation_context,
 )
 from src.server.workspace_shell_runtime import render_workspace_shell_runtime_html
 from src.server.circuit_library_runtime import render_circuit_library_runtime_html
@@ -3296,6 +3304,16 @@ class FastApiRouteBindings:
 
         @app.middleware("http")
         async def edge_security_middleware(request: Request, call_next):
+            request_id = str(request.headers.get("x-nexa-request-id") or request.headers.get("x-request-id") or uuid4().hex)
+            session_claims = self._resolve_session_claims(request)
+            request_context = request_observation_context(
+                method=request.method,
+                path=request.url.path,
+                headers=request.headers,
+                query_params=dict(request.query_params),
+                session_claims=session_claims,
+                request_id=request_id,
+            )
             cors_header_values = cors_headers(
                 origin=request.headers.get("origin"),
                 allowed_origins=self.config.cors_allowed_origins,
@@ -3305,17 +3323,22 @@ class FastApiRouteBindings:
             )
             if is_cors_preflight(method=request.method, headers=request.headers):
                 response = Response(status_code=204 if cors_header_values else 403)
+                response.headers["x-nexa-request-id"] = request_id
                 for key, value in cors_header_values.items():
                     response.headers[key] = value
                 if self.config.security_headers_enabled:
                     apply_security_headers(response.headers)
+                if self.config.edge_observability_enabled:
+                    emit_edge_observation(
+                        self.dependencies.edge_observation_writer,
+                        edge_request_completed_event(request_context=request_context, status_code=response.status_code),
+                    )
                 return response
 
             if self.config.rate_limit_enabled and path_is_rate_limited(
                 request.url.path,
                 self.config.rate_limit_path_prefixes,
             ):
-                session_claims = self._resolve_session_claims(request)
                 client_host = request.client.host if request.client is not None else None
                 rate_limit_key = rate_limit_identity(
                     method=request.method,
@@ -3328,19 +3351,44 @@ class FastApiRouteBindings:
                     response = JSONResponse(
                         status_code=429,
                         content=rate_limited_payload(),
-                        headers={"retry-after": str(retry_after)},
+                        headers={"retry-after": str(retry_after), "x-nexa-request-id": request_id},
                     )
                     for key, value in cors_header_values.items():
                         response.headers[key] = value
                     if self.config.security_headers_enabled:
                         apply_security_headers(response.headers)
+                    if self.config.edge_observability_enabled:
+                        emit_edge_observation(
+                            self.dependencies.edge_observation_writer,
+                            edge_request_completed_event(request_context=request_context, status_code=response.status_code),
+                        )
                     return response
 
-            response = await call_next(request)
+            try:
+                response = await call_next(request)
+            except Exception as exc:
+                if self.config.edge_observability_enabled and self.config.edge_exception_capture_enabled:
+                    emit_edge_observation(
+                        self.dependencies.edge_observation_writer,
+                        edge_exception_event(request_context=request_context, exc=exc),
+                    )
+                    response = JSONResponse(
+                        status_code=500,
+                        content=edge_exception_payload(request_id=request_id),
+                        headers={"x-nexa-request-id": request_id},
+                    )
+                else:
+                    raise
+            response.headers["x-nexa-request-id"] = request_id
             for key, value in cors_header_values.items():
                 response.headers[key] = value
             if self.config.security_headers_enabled:
                 apply_security_headers(response.headers)
+            if self.config.edge_observability_enabled:
+                emit_edge_observation(
+                    self.dependencies.edge_observation_writer,
+                    edge_request_completed_event(request_context=request_context, status_code=response.status_code),
+                )
             return response
 
         app.include_router(self.build_router())

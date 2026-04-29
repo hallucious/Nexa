@@ -30,6 +30,8 @@ class FastApiBindingConfig:
     rate_limit_requests_per_window: int = 60
     rate_limit_window_seconds: int = 60
     rate_limit_path_prefixes: tuple[str, ...] = ("/api/runs",)
+    edge_observability_enabled: bool = True
+    edge_exception_capture_enabled: bool = True
 
     def __post_init__(self) -> None:
         if not str(self.title).strip():
@@ -87,6 +89,7 @@ EngineResultProvider = Callable[[str], Optional[EngineResultEnvelope]]
 EngineLaunchDecider = Callable[..., EngineRunLaunchResponse]
 IdentifierFactory = Callable[[], str]
 NowIsoProvider = Callable[[], str]
+EdgeObservationWriter = Callable[[Mapping[str, Any]], Any]
 PublicSharePayloadProvider = Callable[[str], Optional[Mapping[str, Any]]]
 PublicSharePayloadRowsProvider = Callable[[], Sequence[Mapping[str, Any]]]
 PublicSharePayloadWriter = Callable[[Mapping[str, Any]], Mapping[str, Any]]
@@ -166,6 +169,10 @@ def _noop_feedback_writer(row: Mapping[str, Any]) -> Mapping[str, Any]:
 
 def _noop_run_record_writer(row: Mapping[str, Any]) -> Mapping[str, Any]:
     return dict(row)
+
+
+def _noop_edge_observation_writer(event: Mapping[str, Any]) -> Mapping[str, Any]:
+    return dict(event)
 
 
 def _none_workspace_row(_: str) -> Optional[Mapping[str, Any]]:
@@ -254,6 +261,7 @@ class FastApiRouteDependencies:
     onboarding_state_writer: OnboardingStateWriter = _noop_onboarding_state_writer
     feedback_writer: FeedbackWriter = _noop_feedback_writer
     run_record_writer: RunRecordWriter = _noop_run_record_writer
+    edge_observation_writer: EdgeObservationWriter = _noop_edge_observation_writer
     provider_probe_history_writer: ProviderProbeHistoryWriter = _noop_probe_history_writer
     managed_secret_writer: ManagedSecretWriter = _default_secret_writer
     managed_secret_metadata_reader: Optional[ManagedSecretMetadataReader] = None
