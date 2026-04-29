@@ -79,6 +79,43 @@ def origin_allowed(origin: str | None, allowed_origins: tuple[str, ...]) -> bool
     return normalized in {normalize_origin(item) for item in allowed_origins if normalize_origin(item)}
 
 
+def _normalize_cors_token(value: Any) -> str:
+    return str(value or "").strip().lower()
+
+
+def _normalize_cors_method(value: Any) -> str:
+    return str(value or "").strip().upper()
+
+
+def _parse_requested_headers(value: str | tuple[str, ...] | list[str] | None) -> tuple[str, ...]:
+    if value is None:
+        return ()
+    if isinstance(value, (list, tuple)):
+        raw_items = value
+    else:
+        raw_items = str(value or "").split(",")
+    return tuple(item for item in (_normalize_cors_token(raw) for raw in raw_items) if item)
+
+
+def _requested_method_allowed(requested_method: str | None, allowed_methods: tuple[str, ...]) -> bool:
+    normalized_request = _normalize_cors_method(requested_method)
+    if not normalized_request:
+        return True
+    allowed = {_normalize_cors_method(item) for item in allowed_methods if _normalize_cors_method(item)}
+    return "*" in allowed or normalized_request in allowed
+
+
+def _requested_headers_allowed(
+    requested_headers: str | tuple[str, ...] | list[str] | None,
+    allowed_headers: tuple[str, ...],
+) -> bool:
+    requested = set(_parse_requested_headers(requested_headers))
+    if not requested:
+        return True
+    allowed = {_normalize_cors_token(item) for item in allowed_headers if _normalize_cors_token(item)}
+    return "*" in allowed or requested.issubset(allowed)
+
+
 def cors_headers(
     *,
     origin: str | None,
@@ -86,8 +123,14 @@ def cors_headers(
     allowed_methods: tuple[str, ...],
     allowed_headers: tuple[str, ...],
     max_age_seconds: int,
+    requested_method: str | None = None,
+    requested_headers: str | tuple[str, ...] | list[str] | None = None,
 ) -> dict[str, str]:
     if not origin_allowed(origin, allowed_origins):
+        return {}
+    if not _requested_method_allowed(requested_method, allowed_methods):
+        return {}
+    if not _requested_headers_allowed(requested_headers, allowed_headers):
         return {}
     return {
         "access-control-allow-origin": normalize_origin(origin) or "",

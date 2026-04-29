@@ -178,6 +178,8 @@ def register_fastapi_edge_middleware(
             allowed_methods=config.cors_allowed_methods,
             allowed_headers=config.cors_allowed_headers,
             max_age_seconds=config.cors_max_age_seconds,
+            requested_method=request.headers.get("access-control-request-method"),
+            requested_headers=request.headers.get("access-control-request-headers"),
         )
         if is_cors_preflight(method=request.method, headers=request.headers):
             response = Response(status_code=204 if cors_header_values else 403)
