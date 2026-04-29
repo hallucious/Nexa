@@ -4,9 +4,12 @@ import json
 
 from src.server.edge_observability_runtime import REDACTED_VALUE
 from src.server.sentry_observability_runtime import (
+    SENTRY_CAPTURE_FAILED_REASON,
+    SENTRY_CAPTURED_REASON,
     SENTRY_DISABLED_REASON,
     SENTRY_DSN_MISSING_REASON,
     SENTRY_INITIALIZED_REASON,
+    capture_sentry_exception,
     initialize_sentry_observability,
     scrub_sentry_event,
 )
@@ -15,9 +18,19 @@ from src.server.sentry_observability_runtime import (
 class _FakeSentrySdk:
     def __init__(self) -> None:
         self.init_kwargs = None
+        self.captured_events = []
 
     def init(self, **kwargs):
         self.init_kwargs = dict(kwargs)
+
+    def capture_event(self, event):
+        self.captured_events.append(dict(event))
+        return "event-001"
+
+
+class _FailingCaptureSentrySdk:
+    def capture_event(self, event):
+        raise RuntimeError("sentry unavailable")
 
 
 def test_sentry_scrubber_removes_request_body_headers_cookies_and_user_pii() -> None:
@@ -120,3 +133,70 @@ def test_sentry_initialization_installs_privacy_safe_before_send_hook() -> None:
     before_send = fake_sdk.init_kwargs["before_send"]
     scrubbed = before_send({"request": {"headers": {"Authorization": "Bearer sk-secret"}}}, None)
     assert scrubbed["request"]["headers"]["authorization"] == REDACTED_VALUE
+
+
+def test_sentry_capture_exception_emits_scrubbed_event_without_raw_secret_content() -> None:
+    fake_sdk = _FakeSentrySdk()
+
+    result = capture_sentry_exception(
+        enabled=True,
+        sdk_module=fake_sdk,
+        exc=RuntimeError("provider failed with sk-runtime-secret"),
+        context={
+            "run_id": "run-001",
+            "worker_token": "sk-worker-secret",
+            "request": {
+                "headers": {
+                    "Authorization": "Bearer sk-header-secret",
+                    "User-Agent": "pytest-client",
+                },
+                "data": {"contract_text": "raw confidential contract text"},
+            },
+        },
+    )
+
+    assert result.enabled is True
+    assert result.captured is True
+    assert result.reason == SENTRY_CAPTURED_REASON
+    assert result.event_id == "event-001"
+    assert len(fake_sdk.captured_events) == 1
+    captured = fake_sdk.captured_events[0]
+    captured_text = json.dumps(captured, sort_keys=True)
+    assert "sk-runtime-secret" not in captured_text
+    assert "sk-worker-secret" not in captured_text
+    assert "sk-header-secret" not in captured_text
+    assert "raw confidential contract text" not in captured_text
+    assert captured["extra"]["run_id"] == "run-001"
+    assert captured["extra"]["worker_token"] == REDACTED_VALUE
+    assert captured["extra"]["request"]["headers"]["authorization"] == REDACTED_VALUE
+    assert captured["extra"]["request"]["headers"]["user-agent"] == "pytest-client"
+    assert captured["extra"]["request"]["data"] == REDACTED_VALUE
+
+
+def test_sentry_capture_exception_returns_disabled_without_calling_sdk() -> None:
+    fake_sdk = _FakeSentrySdk()
+
+    result = capture_sentry_exception(
+        enabled=False,
+        sdk_module=fake_sdk,
+        exc=RuntimeError("should not be captured"),
+        context={"token": "sk-secret"},
+    )
+
+    assert result.enabled is False
+    assert result.captured is False
+    assert result.reason == SENTRY_DISABLED_REASON
+    assert fake_sdk.captured_events == []
+
+
+def test_sentry_capture_exception_suppresses_sdk_failures() -> None:
+    result = capture_sentry_exception(
+        enabled=True,
+        sdk_module=_FailingCaptureSentrySdk(),
+        exc=RuntimeError("capture failed"),
+        context={"safe": "value"},
+    )
+
+    assert result.enabled is True
+    assert result.captured is False
+    assert result.reason == SENTRY_CAPTURE_FAILED_REASON
