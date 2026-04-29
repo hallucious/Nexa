@@ -3,14 +3,23 @@ from __future__ import annotations
 import json
 from types import SimpleNamespace
 
+import pytest
+
+pytest.importorskip("fastapi")
+pytest.importorskip("httpx")
+from fastapi import FastAPI
+from fastapi.testclient import TestClient
+
 from src.server.edge_observability_runtime import REDACTED_VALUE
 from src.server.fastapi_binding_models import FastApiBindingConfig
 from src.server.fastapi_sentry_binding import (
+    FASTAPI_SENTRY_EXCEPTION_REASON,
     build_fastapi_sentry_exception_context,
     capture_fastapi_sentry_exception,
+    install_fastapi_sentry_exception_middleware,
     install_fastapi_sentry_observability,
 )
-from src.server.sentry_observability_runtime import SENTRY_CAPTURED_REASON, SENTRY_INITIALIZED_REASON
+from src.server.sentry_observability_runtime import SENTRY_CAPTURED_REASON, SENTRY_DISABLED_REASON, SENTRY_INITIALIZED_REASON
 
 
 class _FakeApp:
@@ -130,3 +139,81 @@ def test_capture_fastapi_sentry_exception_emits_scrubbed_event() -> None:
     assert extra["request"]["headers"]["user-agent"] == "pytest-client"
     assert extra["request"]["query_params"]["api_key"] == REDACTED_VALUE
     assert extra["request_body"] == REDACTED_VALUE
+
+
+def test_install_fastapi_sentry_exception_middleware_captures_unhandled_exception_with_scrubbed_context() -> None:
+    app = FastAPI()
+    fake_sdk = _FakeSentrySdk()
+    config = FastApiBindingConfig(
+        sentry_enabled=True,
+        sentry_dsn="https://examplePublicKey@o0.ingest.sentry.io/0",
+        sentry_environment="production",
+    )
+
+    install_result = install_fastapi_sentry_exception_middleware(
+        app,
+        config,
+        sdk_module=fake_sdk,
+        session_claims_resolver=lambda _request: {"sub": "raw-user-id", "session_token": "sk-session-secret"},
+    )
+
+    @app.get("/boom")
+    async def _boom():
+        raise RuntimeError("handler failed with sk-runtime-secret")
+
+    client = TestClient(app, raise_server_exceptions=False)
+    response = client.get(
+        "/boom?api_key=sk-query-secret",
+        headers={
+            "Authorization": "Bearer sk-header-secret",
+            "Cookie": "session=secret-cookie",
+            "User-Agent": "pytest-client",
+            "X-Nexa-Request-Id": "req-sentry-mw-001",
+        },
+    )
+
+    assert install_result.initialized is True
+    assert response.status_code == 500
+    payload = response.json()
+    assert payload["status"] == "error"
+    assert payload["reason"] == FASTAPI_SENTRY_EXCEPTION_REASON
+    assert payload["request_id"] == "req-sentry-mw-001"
+    assert payload["observability"]["captured"] is True
+    assert payload["observability"]["reason"] == SENTRY_CAPTURED_REASON
+    assert "sk-runtime-secret" not in response.text
+    assert "sk-header-secret" not in response.text
+    assert "sk-query-secret" not in response.text
+
+    assert len(fake_sdk.captured_events) == 1
+    captured = fake_sdk.captured_events[0]
+    captured_text = json.dumps(captured, sort_keys=True)
+    assert "sk-runtime-secret" not in captured_text
+    assert "sk-header-secret" not in captured_text
+    assert "secret-cookie" not in captured_text
+    assert "sk-query-secret" not in captured_text
+    assert "sk-session-secret" not in captured_text
+    assert captured["extra"]["request_id"] == "req-sentry-mw-001"
+    assert captured["extra"]["request"]["headers"]["authorization"] == REDACTED_VALUE
+    assert captured["extra"]["request"]["headers"]["cookie"] == REDACTED_VALUE
+    assert captured["extra"]["request"]["query_params"]["api_key"] == REDACTED_VALUE
+    assert captured["extra"]["session"]["session_token"] == REDACTED_VALUE
+
+
+def test_install_fastapi_sentry_exception_middleware_is_safe_noop_when_disabled() -> None:
+    app = FastAPI()
+    fake_sdk = _FakeSentrySdk()
+    install_fastapi_sentry_exception_middleware(app, FastApiBindingConfig(), sdk_module=fake_sdk)
+
+    @app.get("/boom")
+    async def _boom():
+        raise RuntimeError("handler failed with sk-runtime-secret")
+
+    client = TestClient(app, raise_server_exceptions=False)
+    response = client.get("/boom", headers={"X-Nexa-Request-Id": "req-disabled"})
+
+    assert response.status_code == 500
+    payload = response.json()
+    assert payload["observability"]["enabled"] is False
+    assert payload["observability"]["captured"] is False
+    assert payload["observability"]["reason"] == SENTRY_DISABLED_REASON
+    assert fake_sdk.captured_events == []

@@ -93,9 +93,15 @@ def _scrub_request_mapping(request: Mapping[str, Any]) -> dict[str, Any]:
     return request_dict
 
 
+def _is_sensitive_field_name(key: str) -> bool:
+    sentinel = "__nexa_safe_sentinel__"
+    return redact_mapping({key: sentinel}).get(key) == REDACTED_VALUE
+
+
 def _redact_sensitive_key_value(key: str, value: Any) -> Any:
-    redacted = redact_mapping({key: value})
-    return redacted.get(key)
+    if _is_sensitive_field_name(key):
+        return REDACTED_VALUE
+    return value
 
 
 def _scrub_mapping(mapping: Mapping[str, Any]) -> dict[str, Any]:
