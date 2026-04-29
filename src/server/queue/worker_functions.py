@@ -21,6 +21,8 @@ from __future__ import annotations
 import logging
 from typing import Any, Optional
 
+from src.server.worker_sentry_binding import capture_worker_sentry_exception
+
 logger = logging.getLogger(__name__)
 
 _RUN_ID_KEY = "run_id"
@@ -37,6 +39,36 @@ def _extract_job_payload(payload: Any) -> dict[str, Any]:
     if isinstance(payload, dict):
         return payload
     raise ValueError(f"Unexpected job payload type: {type(payload)!r}")
+
+
+def _capture_worker_exception(
+    *,
+    ctx: dict[str, Any],
+    job_payload: dict[str, Any],
+    exc: BaseException,
+    stage: str,
+    failure_reason: str | None = None,
+) -> None:
+    """Best-effort worker Sentry capture.
+
+    Observability must never become the user-visible or worker-visible failure
+    path, so capture errors are suppressed after a local warning.
+    """
+
+    try:
+        capture_worker_sentry_exception(
+            ctx=ctx,
+            exc=exc,
+            job_payload=job_payload,
+            stage=stage,
+            failure_reason=failure_reason,
+        )
+    except Exception as capture_exc:  # noqa: BLE001
+        logger.warning(
+            "execute_queued_run: worker Sentry capture failed for stage=%s: %s",
+            stage,
+            capture_exc,
+        )
 
 
 async def execute_queued_run(
@@ -85,16 +117,24 @@ async def execute_queued_run(
         try:
             claimed = submission_store.mark_claimed(run_id=run_id)
         except Exception as exc:  # noqa: BLE001
+            failure_reason = f"claim_error: {exc}"
             logger.error(
                 "execute_queued_run: mark_claimed raised for run_id=%s: %s; aborting",
                 run_id,
                 exc,
             )
+            _capture_worker_exception(
+                ctx=ctx,
+                job_payload=job_data,
+                exc=exc,
+                stage="mark_claimed",
+                failure_reason=failure_reason,
+            )
             return {
                 "run_id": run_id,
                 "workspace_id": workspace_id,
                 "status": "aborted",
-                "reason": f"claim_error: {exc}",
+                "reason": failure_reason,
             }
 
         if not claimed:
@@ -118,6 +158,13 @@ async def execute_queued_run(
                 "execute_queued_run: mark_running failed for run_id=%s: %s (non-fatal)",
                 run_id,
                 exc,
+            )
+            _capture_worker_exception(
+                ctx=ctx,
+                job_payload=job_data,
+                exc=exc,
+                stage="mark_running",
+                failure_reason=f"mark_running_error: {exc}",
             )
 
     # Step 3 — emit lifecycle start event.
@@ -154,6 +201,13 @@ async def execute_queued_run(
             "execute_queued_run: engine execution raised for run_id=%s",
             run_id,
         )
+        _capture_worker_exception(
+            ctx=ctx,
+            job_payload=job_data,
+            exc=exc,
+            stage="engine_execution",
+            failure_reason=failure_reason,
+        )
 
     # Step 5 — transition to terminal status.
     if submission_store is not None:
@@ -184,6 +238,13 @@ async def execute_queued_run(
                 "execute_queued_run: terminal status update failed for run_id=%s: %s",
                 run_id,
                 exc,
+            )
+            _capture_worker_exception(
+                ctx=ctx,
+                job_payload=job_data,
+                exc=exc,
+                stage="terminal_status_update",
+                failure_reason=f"terminal_status_update_error: {exc}",
             )
 
     # Step 6 — emit lifecycle terminal event.
