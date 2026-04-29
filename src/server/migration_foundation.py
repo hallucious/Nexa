@@ -151,6 +151,42 @@ def build_catalog_surfaces_migration() -> MigrationScript:
         ),
     )
 
+
+def build_gdpr_user_deletion_audit_migration() -> MigrationScript:
+    """Return the GDPR user-deletion audit migration registered with server migrations.
+
+    The concrete schema builder lives in ``gdpr_deletion_schema`` to keep GDPR
+    deletion concerns modular. The import is local to avoid a circular import:
+    that module uses the generic schema-rendering helpers defined above.
+    """
+
+    from src.server.gdpr_deletion_schema import build_gdpr_user_deletion_audit_migration as _build
+
+    return _build()
+
+
+def build_incremental_server_migrations() -> tuple[MigrationScript, ...]:
+    """Return non-initial server migration fragments in repository order."""
+
+    return (
+        build_workspace_shell_sources_migration(),
+        build_public_share_persistence_migration(),
+        build_catalog_surfaces_migration(),
+        build_gdpr_user_deletion_audit_migration(),
+    )
+
+
+def build_all_server_migrations() -> tuple[MigrationScript, ...]:
+    """Return all server migration builders in execution order.
+
+    This function gives future Alembic/bootstrap glue one canonical place to
+    discover the current migration family without reassembling scattered helper
+    functions manually.
+    """
+
+    return (build_initial_server_migration(), *build_incremental_server_migrations())
+
+
 def build_migration_file_text(migration: MigrationScript) -> str:
     parts = [f"-- migration_id: {migration.migration_id}", f"-- summary: {migration.summary}"]
     for step in migration.steps:
