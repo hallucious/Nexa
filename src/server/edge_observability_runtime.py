@@ -179,15 +179,6 @@ def emit_edge_observation(writer: EdgeObservationWriter | None, event: Mapping[s
         return
 
 
-try:
-    from src.server.fastapi_sentry_autowire import install_fastapi_sentry_autowire
-
-    install_fastapi_sentry_autowire()
-except Exception:
-    # FastAPI may be absent in non-server environments; autowire is best-effort.
-    pass
-
-
 __all__ = [
     "EDGE_EXCEPTION_REASON",
     "EdgeObservationEvent",

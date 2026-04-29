@@ -29,6 +29,10 @@ from src.server.edge_observability_runtime import (
     emit_edge_observation,
     request_observation_context,
 )
+from src.server.fastapi_app_bootstrap import (
+    capture_fastapi_app_exception,
+    install_fastapi_app_observability_bootstrap,
+)
 from src.server.workspace_shell_runtime import render_workspace_shell_runtime_html
 from src.server.circuit_library_runtime import render_circuit_library_runtime_html
 from src.server.result_history_runtime import render_workspace_result_history_html
@@ -3297,6 +3301,11 @@ class FastApiRouteBindings:
 
     def build_app(self) -> FastAPI:
         app = FastAPI(title=self.config.title, version=self.config.version)
+        install_fastapi_app_observability_bootstrap(
+            app,
+            self.config,
+            session_claims_resolver=self._resolve_session_claims,
+        )
         rate_limiter = InMemoryEdgeRateLimiter(
             requests_per_window=self.config.rate_limit_requests_per_window,
             window_seconds=self.config.rate_limit_window_seconds,
@@ -3371,6 +3380,18 @@ class FastApiRouteBindings:
                     emit_edge_observation(
                         self.dependencies.edge_observation_writer,
                         edge_exception_event(request_context=request_context, exc=exc),
+                    )
+                    capture_fastapi_app_exception(
+                        app=app,
+                        config=self.config,
+                        exc=exc,
+                        method=request.method,
+                        path=request.url.path,
+                        headers=request.headers,
+                        query_params=dict(request.query_params),
+                        request_id=request_id,
+                        session_claims=session_claims,
+                        status_code=500,
                     )
                     response = JSONResponse(
                         status_code=500,
