@@ -29,7 +29,10 @@ class FastApiBindingConfig:
     rate_limit_enabled: bool = False
     rate_limit_requests_per_window: int = 60
     rate_limit_window_seconds: int = 60
-    rate_limit_path_prefixes: tuple[str, ...] = ("/api/runs",)
+    rate_limit_path_prefixes: tuple[str, ...] = ("/api/runs", "/api/workspaces/*/uploads")
+    rate_limit_backend: str = "memory"
+    rate_limit_redis_key_prefix: str = "nexa:edge:rate-limit"
+    rate_limit_redis_fail_open: bool = True
     edge_observability_enabled: bool = True
     edge_exception_capture_enabled: bool = True
     sentry_enabled: bool = False
@@ -51,6 +54,10 @@ class FastApiBindingConfig:
             raise ValueError("FastApiBindingConfig.rate_limit_requests_per_window must be positive")
         if self.rate_limit_window_seconds < 1:
             raise ValueError("FastApiBindingConfig.rate_limit_window_seconds must be positive")
+        if str(self.rate_limit_backend or "").strip().lower() not in {"memory", "redis"}:
+            raise ValueError("FastApiBindingConfig.rate_limit_backend must be memory or redis")
+        if not str(self.rate_limit_redis_key_prefix or "").strip():
+            raise ValueError("FastApiBindingConfig.rate_limit_redis_key_prefix must be non-empty")
         if not str(self.sentry_environment or "").strip():
             raise ValueError("FastApiBindingConfig.sentry_environment must be non-empty")
         if not 0 <= float(self.sentry_traces_sample_rate) <= 1:
@@ -99,6 +106,7 @@ EngineLaunchDecider = Callable[..., EngineRunLaunchResponse]
 IdentifierFactory = Callable[[], str]
 NowIsoProvider = Callable[[], str]
 EdgeObservationWriter = Callable[[Mapping[str, Any]], Any]
+EdgeRateLimitRedisClientProvider = Callable[[], Any]
 PublicSharePayloadProvider = Callable[[str], Optional[Mapping[str, Any]]]
 PublicSharePayloadRowsProvider = Callable[[], Sequence[Mapping[str, Any]]]
 PublicSharePayloadWriter = Callable[[Mapping[str, Any]], Mapping[str, Any]]
@@ -271,6 +279,7 @@ class FastApiRouteDependencies:
     feedback_writer: FeedbackWriter = _noop_feedback_writer
     run_record_writer: RunRecordWriter = _noop_run_record_writer
     edge_observation_writer: EdgeObservationWriter = _noop_edge_observation_writer
+    edge_rate_limit_redis_client_provider: Optional[EdgeRateLimitRedisClientProvider] = None
     provider_probe_history_writer: ProviderProbeHistoryWriter = _noop_probe_history_writer
     managed_secret_writer: ManagedSecretWriter = _default_secret_writer
     managed_secret_metadata_reader: Optional[ManagedSecretMetadataReader] = None

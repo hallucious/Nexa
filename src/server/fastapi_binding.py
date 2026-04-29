@@ -14,8 +14,8 @@ from src.server.aws_secrets_manager_models import AwsSecretsManagerBindingConfig
 from src.server.framework_binding_models import FrameworkInboundRequest, FrameworkOutboundResponse
 from src.server.fastapi_binding_models import FastApiBindingConfig, FastApiRouteDependencies
 from src.server.fastapi_app_bootstrap import capture_fastapi_app_exception, install_fastapi_app_observability_bootstrap
+from src.server.edge_rate_limit_runtime import build_edge_rate_limiter
 from src.server.edge_security_runtime import (
-    InMemoryEdgeRateLimiter,
     apply_security_headers,
     cors_headers,
     is_cors_preflight,
@@ -3303,9 +3303,13 @@ class FastApiRouteBindings:
             self.config,
             session_claims_resolver=self._resolve_session_claims,
         )
-        rate_limiter = InMemoryEdgeRateLimiter(
+        rate_limiter = build_edge_rate_limiter(
+            backend=self.config.rate_limit_backend,
             requests_per_window=self.config.rate_limit_requests_per_window,
             window_seconds=self.config.rate_limit_window_seconds,
+            redis_client=self._resolve_edge_rate_limit_redis_client(),
+            redis_key_prefix=self.config.rate_limit_redis_key_prefix,
+            redis_fail_open=self.config.rate_limit_redis_fail_open,
         )
 
         @app.middleware("http")
@@ -3411,6 +3415,17 @@ class FastApiRouteBindings:
 
         app.include_router(self.build_router())
         return app
+
+    def _resolve_edge_rate_limit_redis_client(self):
+        provider = self.dependencies.edge_rate_limit_redis_client_provider
+        if provider is None:
+            return None
+        try:
+            return provider()
+        except Exception:
+            # Rate-limit backend construction must not break app bootstrap.
+            # Redis failures are handled by the Redis limiter policy itself.
+            return None
 
     def _resolve_managed_secret_metadata_reader(self):
         client = self.dependencies.aws_secrets_manager_client_provider() if self.dependencies.aws_secrets_manager_client_provider is not None else None

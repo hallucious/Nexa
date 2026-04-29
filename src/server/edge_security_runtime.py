@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import fnmatch
 import time
 from typing import Any, Mapping
 
@@ -103,7 +104,17 @@ def is_cors_preflight(*, method: str, headers: Mapping[str, Any]) -> bool:
 
 def path_is_rate_limited(path: str, prefixes: tuple[str, ...]) -> bool:
     normalized_path = str(path or "")
-    return any(normalized_path == prefix or normalized_path.startswith(prefix.rstrip("/") + "/") for prefix in prefixes if prefix)
+    for raw_prefix in prefixes:
+        prefix = str(raw_prefix or "").strip()
+        if not prefix:
+            continue
+        if "*" in prefix:
+            if fnmatch.fnmatch(normalized_path, prefix) or fnmatch.fnmatch(normalized_path, prefix.rstrip("/") + "/*"):
+                return True
+            continue
+        if normalized_path == prefix or normalized_path.startswith(prefix.rstrip("/") + "/"):
+            return True
+    return False
 
 
 def rate_limit_identity(
