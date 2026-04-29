@@ -21,6 +21,15 @@ class FastApiBindingConfig:
     title: str = "Nexa Server API"
     version: str = "0.1.0"
     session_claims_header: str = "x-nexa-session-claims"
+    security_headers_enabled: bool = True
+    cors_allowed_origins: tuple[str, ...] = ()
+    cors_allowed_methods: tuple[str, ...] = ("GET", "POST", "PUT", "DELETE", "OPTIONS")
+    cors_allowed_headers: tuple[str, ...] = ("content-type", "x-nexa-session-claims")
+    cors_max_age_seconds: int = 600
+    rate_limit_enabled: bool = False
+    rate_limit_requests_per_window: int = 60
+    rate_limit_window_seconds: int = 60
+    rate_limit_path_prefixes: tuple[str, ...] = ("/api/runs",)
 
     def __post_init__(self) -> None:
         if not str(self.title).strip():
@@ -29,6 +38,12 @@ class FastApiBindingConfig:
             raise ValueError("FastApiBindingConfig.version must be non-empty")
         if not str(self.session_claims_header).strip():
             raise ValueError("FastApiBindingConfig.session_claims_header must be non-empty")
+        if self.cors_max_age_seconds < 0:
+            raise ValueError("FastApiBindingConfig.cors_max_age_seconds must be non-negative")
+        if self.rate_limit_requests_per_window < 1:
+            raise ValueError("FastApiBindingConfig.rate_limit_requests_per_window must be positive")
+        if self.rate_limit_window_seconds < 1:
+            raise ValueError("FastApiBindingConfig.rate_limit_window_seconds must be positive")
 
 
 SessionClaimsResolver = Callable[[Request], Optional[Mapping[str, Any]]]

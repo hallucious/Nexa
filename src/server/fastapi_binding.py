@@ -12,6 +12,15 @@ from src.server.aws_secrets_manager_binding import AwsSecretsManagerSecretAuthor
 from src.server.aws_secrets_manager_models import AwsSecretsManagerBindingConfig
 from src.server.framework_binding_models import FrameworkInboundRequest, FrameworkOutboundResponse
 from src.server.fastapi_binding_models import FastApiBindingConfig, FastApiRouteDependencies
+from src.server.edge_security_runtime import (
+    InMemoryEdgeRateLimiter,
+    apply_security_headers,
+    cors_headers,
+    is_cors_preflight,
+    path_is_rate_limited,
+    rate_limit_identity,
+    rate_limited_payload,
+)
 from src.server.workspace_shell_runtime import render_workspace_shell_runtime_html
 from src.server.circuit_library_runtime import render_circuit_library_runtime_html
 from src.server.result_history_runtime import render_workspace_result_history_html
@@ -3280,6 +3289,60 @@ class FastApiRouteBindings:
 
     def build_app(self) -> FastAPI:
         app = FastAPI(title=self.config.title, version=self.config.version)
+        rate_limiter = InMemoryEdgeRateLimiter(
+            requests_per_window=self.config.rate_limit_requests_per_window,
+            window_seconds=self.config.rate_limit_window_seconds,
+        )
+
+        @app.middleware("http")
+        async def edge_security_middleware(request: Request, call_next):
+            cors_header_values = cors_headers(
+                origin=request.headers.get("origin"),
+                allowed_origins=self.config.cors_allowed_origins,
+                allowed_methods=self.config.cors_allowed_methods,
+                allowed_headers=self.config.cors_allowed_headers,
+                max_age_seconds=self.config.cors_max_age_seconds,
+            )
+            if is_cors_preflight(method=request.method, headers=request.headers):
+                response = Response(status_code=204 if cors_header_values else 403)
+                for key, value in cors_header_values.items():
+                    response.headers[key] = value
+                if self.config.security_headers_enabled:
+                    apply_security_headers(response.headers)
+                return response
+
+            if self.config.rate_limit_enabled and path_is_rate_limited(
+                request.url.path,
+                self.config.rate_limit_path_prefixes,
+            ):
+                session_claims = self._resolve_session_claims(request)
+                client_host = request.client.host if request.client is not None else None
+                rate_limit_key = rate_limit_identity(
+                    method=request.method,
+                    path=request.url.path,
+                    client_host=client_host,
+                    session_claims=session_claims,
+                )
+                allowed, retry_after = rate_limiter.record(rate_limit_key)
+                if not allowed:
+                    response = JSONResponse(
+                        status_code=429,
+                        content=rate_limited_payload(),
+                        headers={"retry-after": str(retry_after)},
+                    )
+                    for key, value in cors_header_values.items():
+                        response.headers[key] = value
+                    if self.config.security_headers_enabled:
+                        apply_security_headers(response.headers)
+                    return response
+
+            response = await call_next(request)
+            for key, value in cors_header_values.items():
+                response.headers[key] = value
+            if self.config.security_headers_enabled:
+                apply_security_headers(response.headers)
+            return response
+
         app.include_router(self.build_router())
         return app
 

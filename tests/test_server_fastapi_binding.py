@@ -22,6 +22,7 @@ from src.server import (
     EngineRunStatusSnapshot,
     EngineSignal,
     ExecutionTargetCatalogEntry,
+    FastApiBindingConfig,
     FastApiRouteDependencies,
     FrameworkRouteBindings,
     RunAuthorizationContext,
@@ -221,7 +222,7 @@ def test_fastapi_binding_matches_framework_and_http_route_definitions() -> None:
     assert fastapi_routes == framework_routes == http_surface_routes
 
 
-def _make_client(*, onboarding_store: InMemoryOnboardingStateStore | None = None, feedback_store: InMemoryFeedbackStore | None = None, artifact_source=None, public_share_payload_provider=None, public_share_payload_rows_provider=None, public_share_payload_writer=None, public_share_payload_deleter=None, public_share_action_report_rows_provider=None, public_share_action_report_writer=None, saved_public_share_rows_provider=None, saved_public_share_writer=None, saved_public_share_deleter=None, workspace_run_rows=None, workspace_result_rows=None, workspace_provider_binding_rows=None, workspace_provider_probe_rows=None, recent_managed_secret_rows=None) -> TestClient:
+def _make_client(*, onboarding_store: InMemoryOnboardingStateStore | None = None, feedback_store: InMemoryFeedbackStore | None = None, artifact_source=None, public_share_payload_provider=None, public_share_payload_rows_provider=None, public_share_payload_writer=None, public_share_payload_deleter=None, public_share_action_report_rows_provider=None, public_share_action_report_writer=None, saved_public_share_rows_provider=None, saved_public_share_writer=None, saved_public_share_deleter=None, workspace_run_rows=None, workspace_result_rows=None, workspace_provider_binding_rows=None, workspace_provider_probe_rows=None, recent_managed_secret_rows=None, fastapi_config: FastApiBindingConfig | None = None) -> TestClient:
     artifact_rows = {
         "run-001": [
             {
@@ -469,7 +470,7 @@ def _make_client(*, onboarding_store: InMemoryOnboardingStateStore | None = None
         deps = bind_onboarding_state_store(dependencies=deps, store=onboarding_store)
     if feedback_store is not None:
         deps = bind_feedback_store(dependencies=deps, store=feedback_store)
-    return TestClient(create_fastapi_app(dependencies=deps))
+    return TestClient(create_fastapi_app(dependencies=deps, config=fastapi_config))
 
 
 def test_fastapi_binding_launch_endpoint_round_trip() -> None:
@@ -4038,3 +4039,78 @@ def test_fastapi_binding_contract_review_vertical_slice_e2e_smoke_path() -> None
     assert 'return_use=contract_review_result' in result_page.text
     assert 'id="ask_pre_signature_question_1"' in result_page.text
     assert 'return_use=contract_review_question' in result_page.text
+
+
+def test_fastapi_binding_applies_security_headers_by_default() -> None:
+    client = _make_client()
+    response = client.get("/app/workspaces", headers=_session_headers())
+
+    assert response.status_code == 200
+    assert response.headers["x-content-type-options"] == "nosniff"
+    assert response.headers["x-frame-options"] == "DENY"
+    assert response.headers["referrer-policy"] == "no-referrer"
+    assert response.headers["cross-origin-opener-policy"] == "same-origin"
+    assert response.headers["cross-origin-resource-policy"] == "same-origin"
+    assert "frame-ancestors 'none'" in response.headers["content-security-policy"]
+    assert "camera=()" in response.headers["permissions-policy"]
+
+
+def test_fastapi_binding_uses_explicit_cors_origin_policy() -> None:
+    config = FastApiBindingConfig(cors_allowed_origins=("https://app.nexa.example",))
+    client = _make_client(fastapi_config=config)
+
+    allowed = client.get(
+        "/api/workspaces",
+        headers={**_session_headers(), "Origin": "https://app.nexa.example"},
+    )
+    assert allowed.status_code == 200
+    assert allowed.headers["access-control-allow-origin"] == "https://app.nexa.example"
+    assert allowed.headers["vary"] == "Origin"
+
+    disallowed = client.get(
+        "/api/workspaces",
+        headers={**_session_headers(), "Origin": "https://evil.example"},
+    )
+    assert disallowed.status_code == 200
+    assert "access-control-allow-origin" not in disallowed.headers
+
+    preflight = client.options(
+        "/api/runs",
+        headers={
+            "Origin": "https://app.nexa.example",
+            "Access-Control-Request-Method": "POST",
+            "Access-Control-Request-Headers": "content-type,x-nexa-session-claims",
+        },
+    )
+    assert preflight.status_code == 204
+    assert preflight.headers["access-control-allow-origin"] == "https://app.nexa.example"
+    assert "POST" in preflight.headers["access-control-allow-methods"]
+    assert "x-nexa-session-claims" in preflight.headers["access-control-allow-headers"]
+
+
+def test_fastapi_binding_rate_limits_sensitive_run_endpoint_without_echoing_payload() -> None:
+    config = FastApiBindingConfig(
+        rate_limit_enabled=True,
+        rate_limit_requests_per_window=2,
+        rate_limit_window_seconds=60,
+        rate_limit_path_prefixes=("/api/runs",),
+    )
+    client = _make_client(fastapi_config=config)
+    request_body = {
+        "workspace_id": "ws-001",
+        "execution_target": {"target_type": "approved_snapshot", "target_ref": "snap-001"},
+        "input_payload": {"question": "sensitive contract text should not be echoed"},
+    }
+
+    first = client.post("/api/runs", headers=_session_headers(), json=request_body)
+    second = client.post("/api/runs", headers=_session_headers(), json=request_body)
+    third = client.post("/api/runs", headers=_session_headers(), json=request_body)
+
+    assert first.status_code == 202
+    assert second.status_code == 202
+    assert third.status_code == 429
+    payload = third.json()
+    assert payload == {"status": "rate_limited", "reason": "edge_rate_limit_exceeded"}
+    assert "retry-after" in third.headers
+    assert "sensitive contract text" not in third.text
+    assert third.headers["x-content-type-options"] == "nosniff"
