@@ -32,6 +32,11 @@ class FastApiBindingConfig:
     rate_limit_path_prefixes: tuple[str, ...] = ("/api/runs",)
     edge_observability_enabled: bool = True
     edge_exception_capture_enabled: bool = True
+    sentry_enabled: bool = False
+    sentry_dsn: str | None = None
+    sentry_environment: str = "local"
+    sentry_release: str | None = None
+    sentry_traces_sample_rate: float = 0.0
 
     def __post_init__(self) -> None:
         if not str(self.title).strip():
@@ -46,6 +51,10 @@ class FastApiBindingConfig:
             raise ValueError("FastApiBindingConfig.rate_limit_requests_per_window must be positive")
         if self.rate_limit_window_seconds < 1:
             raise ValueError("FastApiBindingConfig.rate_limit_window_seconds must be positive")
+        if not str(self.sentry_environment or "").strip():
+            raise ValueError("FastApiBindingConfig.sentry_environment must be non-empty")
+        if not 0 <= float(self.sentry_traces_sample_rate) <= 1:
+            raise ValueError("FastApiBindingConfig.sentry_traces_sample_rate must be between 0 and 1")
 
 
 SessionClaimsResolver = Callable[[Request], Optional[Mapping[str, Any]]]
