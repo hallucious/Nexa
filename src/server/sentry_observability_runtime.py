@@ -13,6 +13,8 @@ SENTRY_INITIALIZED_REASON = "sentry_initialized"
 SENTRY_INIT_FAILED_REASON = "sentry_init_failed"
 SENTRY_CAPTURED_REASON = "sentry_exception_captured"
 SENTRY_CAPTURE_FAILED_REASON = "sentry_capture_failed"
+SENTRY_NOT_INITIALIZED_REASON = "sentry_not_initialized"
+SENTRY_APP_STATE_KEY = "nexa_sentry_observability"
 
 REQUEST_BODY_KEYS = {"data", "body", "raw_body", "json", "form", "files"}
 REQUEST_COOKIE_KEYS = {"cookies", "cookie"}
@@ -243,6 +245,40 @@ def initialize_sentry_from_config(config: Any, *, sdk_module: Any | None = None)
     )
 
 
+def sentry_runtime_state_payload(result: SentryInitializationResult) -> dict[str, Any]:
+    """Return app/worker-safe Sentry runtime state without storing DSN values."""
+
+    return result.as_payload()
+
+
+def install_sentry_observability_on_app(app: Any, config: Any, *, sdk_module: Any | None = None) -> SentryInitializationResult:
+    """Initialize Sentry and store a sanitized runtime state on an app-like object.
+
+    The stored state is deliberately DSN-free and contains only operational
+    posture needed by API or worker exception-capture call sites.
+    """
+
+    result = initialize_sentry_from_config(config, sdk_module=sdk_module)
+    state = getattr(app, "state", None)
+    if state is not None:
+        try:
+            setattr(state, SENTRY_APP_STATE_KEY, sentry_runtime_state_payload(result))
+        except Exception:
+            # Sentry bootstrap state must never break app construction.
+            pass
+    return result
+
+
+def read_sentry_observability_app_state(app: Any) -> dict[str, Any]:
+    """Read sanitized Sentry runtime state from an app-like object."""
+
+    state = getattr(app, "state", None)
+    if state is None:
+        return {}
+    payload = getattr(state, SENTRY_APP_STATE_KEY, {})
+    return dict(payload) if isinstance(payload, Mapping) else {}
+
+
 def build_sentry_exception_event(*, exc: BaseException, context: Mapping[str, Any] | None = None) -> dict[str, Any] | None:
     """Build the exact scrubbed event used by exception capture.
 
@@ -326,20 +362,53 @@ def capture_sentry_exception_from_config(
     )
 
 
+def capture_sentry_exception_for_app(
+    *,
+    app: Any,
+    exc: BaseException,
+    context: Mapping[str, Any] | None = None,
+    sdk_module: Any | None = None,
+) -> SentryCaptureResult:
+    """Capture an exception using sanitized app-level Sentry runtime state."""
+
+    state = read_sentry_observability_app_state(app)
+    if not state:
+        return SentryCaptureResult(enabled=False, captured=False, reason=SENTRY_DISABLED_REASON)
+    if not bool(state.get("initialized")):
+        return SentryCaptureResult(
+            enabled=bool(state.get("enabled")),
+            captured=False,
+            reason=SENTRY_NOT_INITIALIZED_REASON if state.get("enabled") else SENTRY_DISABLED_REASON,
+        )
+    merged_context = {"sentry_runtime": state, **dict(context or {})}
+    return capture_sentry_exception(
+        exc=exc,
+        enabled=True,
+        context=merged_context,
+        sdk_module=sdk_module,
+    )
+
+
 __all__ = [
+    "SENTRY_APP_STATE_KEY",
     "SENTRY_CAPTURE_FAILED_REASON",
     "SENTRY_CAPTURED_REASON",
     "SENTRY_DISABLED_REASON",
     "SENTRY_DSN_MISSING_REASON",
     "SENTRY_INIT_FAILED_REASON",
     "SENTRY_INITIALIZED_REASON",
+    "SENTRY_NOT_INITIALIZED_REASON",
     "SENTRY_SDK_MISSING_REASON",
     "SentryCaptureResult",
     "SentryInitializationResult",
     "build_sentry_exception_event",
     "capture_sentry_exception",
+    "capture_sentry_exception_for_app",
     "capture_sentry_exception_from_config",
     "initialize_sentry_from_config",
     "initialize_sentry_observability",
+    "install_sentry_observability_on_app",
+    "read_sentry_observability_app_state",
     "scrub_sentry_event",
+    "sentry_runtime_state_payload",
 ]
