@@ -17,7 +17,17 @@ SENSITIVE_KEY_PARTS = (
     "apikey",
     "session",
     "credential",
+)
+SENSITIVE_KEY_EXACT_MATCHES = {
     "key",
+}
+SENSITIVE_KEY_SUFFIXES = (
+    "_key",
+    "_token",
+    "_secret",
+    "_password",
+    "_credential",
+    "_credentials",
 )
 
 SAFE_HEADER_ALLOWLIST = {
@@ -34,9 +44,19 @@ SAFE_HEADER_ALLOWLIST = {
 EdgeObservationWriter = Callable[[Mapping[str, Any]], Any]
 
 
+def _normalize_key(key: Any) -> str:
+    return str(key or "").strip().lower().replace("-", "_")
+
+
 def _is_sensitive_key(key: Any) -> bool:
-    normalized = str(key or "").strip().lower().replace("-", "_")
-    return any(part in normalized for part in SENSITIVE_KEY_PARTS)
+    normalized = _normalize_key(key)
+    if not normalized:
+        return False
+    if normalized in SENSITIVE_KEY_EXACT_MATCHES:
+        return True
+    if any(part in normalized for part in SENSITIVE_KEY_PARTS):
+        return True
+    return any(normalized.endswith(suffix) for suffix in SENSITIVE_KEY_SUFFIXES)
 
 
 def _redact_scalar(value: Any) -> Any:

@@ -8,6 +8,7 @@ from typing import Any, Mapping
 SECURITY_HEADERS: dict[str, str] = {
     "x-content-type-options": "nosniff",
     "x-frame-options": "DENY",
+    "strict-transport-security": "max-age=31536000; includeSubDomains",
     "referrer-policy": "no-referrer",
     "permissions-policy": "camera=(), microphone=(), geolocation=()",
     "cross-origin-opener-policy": "same-origin",
